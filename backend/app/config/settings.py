@@ -1,8 +1,9 @@
 import os
 from dotenv import load_dotenv
-
+from pathlib import Path
 # loads .env from project root when running locally
-load_dotenv()
+env_path = Path(__file__).resolve().parents[3] / ".env"
+load_dotenv(env_path)
 
 class Settings:
     APP_HOST: str = os.getenv("APP_HOST", "0.0.0.0")

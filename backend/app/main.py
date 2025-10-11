@@ -2,7 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.api.v1.routes.health import router as health_router
-
+from app.api.v1.routes.network import router as network_router
+import os
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Adaptive Multimodal Logistics API",
@@ -23,7 +24,8 @@ def create_app() -> FastAPI:
 
     # Routers
     app.include_router(health_router, prefix=settings.API_PREFIX)
-
+    app.include_router(network_router, prefix=settings.API_PREFIX)
+    print("DB URL:", os.getenv("DATABASE_URL"))
     @app.get("/")
     def root():
         return {"message": "Adaptive Logistics backend is running", "docs": f"{settings.API_PREFIX}/docs"}
@@ -31,3 +33,4 @@ def create_app() -> FastAPI:
     return app
 
 app = create_app()
+

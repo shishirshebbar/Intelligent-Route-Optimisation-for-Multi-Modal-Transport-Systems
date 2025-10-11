@@ -7,12 +7,12 @@ class Plan(Base):
     __tablename__ = "plans"
 
     id = Column(Text, primary_key=True)
-    status = Column(Text, nullable=True)  # draft|active|rerouted|completed|failed
+    status = Column(Text)
     created_at = Column(TIMESTAMP(timezone=True))
-    total_cost = Column(DOUBLE_PRECISION, nullable=True)
-    total_time_min = Column(INTEGER, nullable=True)
-    total_co2e_kg = Column(DOUBLE_PRECISION, nullable=True)
-    details_json = Column(JSONB, nullable=True)
+    total_cost = Column(DOUBLE_PRECISION)
+    total_time_min = Column(INTEGER)
+    total_co2e_kg = Column(DOUBLE_PRECISION)
+    details_json = Column(JSONB)
 
-    # relationship to legs (lazy='select' keeps it simple)
+    # string reference avoids import cycles
     legs = relationship("PlanLeg", back_populates="plan", cascade="all, delete-orphan")
