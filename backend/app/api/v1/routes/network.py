@@ -1,9 +1,13 @@
-from typing import Optional
-from fastapi import APIRouter, Depends, Query, HTTPException
+from __future__ import annotations
+
+from typing import Generator, List, Optional, Tuple
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import Session
-from sqlalchemy import select, func
+
 from app.db.session import SessionLocal
-from app.db.models.location import Location
+from app.db.models.location import Location as LocationModel
 from app.schemas.network import (
     LocationIn,
     LocationOut,
@@ -11,116 +15,123 @@ from app.schemas.network import (
     LocationType,
 )
 
-router = APIRouter(prefix="/network", tags=["network"])
+router = APIRouter(tags=["network"], prefix="/network")
 
-# --- DB session dependency ---
-def get_db():
+
+# ---------- DB session dependency ----------
+def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
 
-# --- Helpers ---
-def to_location_out(row: Location) -> LocationOut:
+
+# ---------- Helpers ----------
+def _to_location_out(m: LocationModel) -> LocationOut:
     return LocationOut(
-        id=row.id,
-        name=row.name,
-        type=row.type,  # type: ignore[arg-type]
-        lat=float(row.lat),
-        lon=float(row.lon),
+        id=m.id,
+        name=m.name,
+        type=m.type,  # Literal enforced by schema
+        lat=float(m.lat),
+        lon=float(m.lon),
     )
 
-# --- GET /network/locations ---
+
+def _parse_bbox(bbox_str: str) -> Tuple[float, float, float, float]:
+    """
+    Accepts 'minLon,minLat,maxLon,maxLat' and returns tuple of floats.
+    Raises ValueError if invalid.
+    """
+    parts = [p.strip() for p in bbox_str.split(",")]
+    if len(parts) != 4:
+        raise ValueError("bbox must have 4 comma-separated numbers: minLon,minLat,maxLon,maxLat")
+    min_lon, min_lat, max_lon, max_lat = map(float, parts)
+    if not (-180 <= min_lon <= 180 and -180 <= max_lon <= 180 and -90 <= min_lat <= 90 and -90 <= max_lat <= 90):
+        raise ValueError("bbox coordinates out of range")
+    if min_lon >= max_lon or min_lat >= max_lat:
+        raise ValueError("bbox min must be less than max")
+    return (min_lon, min_lat, max_lon, max_lat)
+
+
+# ---------- GET /network/locations ----------
 @router.get("/locations", response_model=LocationListResponse)
 def list_locations(
-    q: Optional[str] = Query(default=None, description="Free-text search on name"),
-    type: Optional[LocationType] = Query(default=None, description="Filter by type"),
+    q: Optional[str] = Query(None, description="Free-text search on name"),
+    type: Optional[LocationType] = Query(None, alias="type", description="Filter by location type"),
     bbox: Optional[str] = Query(
-        default=None,
-        description="Bounding box as 'minLon,minLat,maxLon,maxLat'",
-        examples=["77.4,12.8,77.8,13.1"],
+        None,
+        description="Bounding box filter: 'minLon,minLat,maxLon,maxLat' (WGS84)",
+        examples={"blr_core": {"value": "77.49,12.86,77.80,13.12"}},
     ),
-    limit: int = Query(default=100, ge=1, le=500),
-    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ):
     """
-    Returns locations with optional filters:
-    - q: ILIKE on name
-    - type: depot|port|rail|airport|customer
-    - bbox: numeric bounding box (lon/lat) -> minLon,minLat,maxLon,maxLat
-    - pagination: limit/offset
+    List locations with optional filters:
+      - q: substring match on name (case-insensitive)
+      - type: depot|port|rail|airport|customer
+      - bbox: minLon,minLat,maxLon,maxLat (WGS84)
+
+    Note: bbox uses PostGIS; we cast geography->geometry and compare with ST_MakeEnvelope(..., 4326).
     """
-    stmt = select(Location)
-    count_stmt = select(func.count(Location.id))
+    # Start with a SQLAlchemy selectable
+    stmt = select(LocationModel)
 
-    # filters
     conditions = []
-    if q:
-        like = f"%{q}%"
-        conditions.append(Location.name.ilike(like))
-    if type:
-        conditions.append(Location.type == type)
 
-    min_lon = min_lat = max_lon = max_lat = None
+    if q:
+        # ILIKE for case-insensitive substring match
+        conditions.append(LocationModel.name.ilike(f"%{q}%"))
+
+    if type:
+        conditions.append(LocationModel.type == type)
+
+    # BBOX filter via PostGIS (no geoalchemy2 required)
     if bbox:
         try:
-            parts = [float(x.strip()) for x in bbox.split(",")]
-            if len(parts) != 4:
-                raise ValueError
-            min_lon, min_lat, max_lon, max_lat = parts
-            # numeric bbox filter on lon/lat (no PostGIS needed)
-            conditions.append(Location.lon.between(min_lon, max_lon))
-            conditions.append(Location.lat.between(min_lat, max_lat))
-        except Exception:
-            raise HTTPException(
-                status_code=400,
-                detail="Invalid bbox format. Use 'minLon,minLat,maxLon,maxLat'",
-            )
+            min_lon, min_lat, max_lon, max_lat = _parse_bbox(bbox)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
 
-    for cond in conditions:
-        stmt = stmt.where(cond)
-        count_stmt = count_stmt.where(cond)
-
-    # order + pagination
-    stmt = stmt.order_by(Location.id.asc()).limit(limit).offset(offset)
-
-    # execute
-    rows = db.execute(stmt).scalars().all()
-    total = db.execute(count_stmt).scalar_one()
-
-    return LocationListResponse(
-        data=[to_location_out(r) for r in rows],
-        total=total,
-    )
-
-# --- POST /network/locations ---
-@router.post("/locations", response_model=LocationOut, status_code=201)
-def create_location(body: LocationIn, db: Session = Depends(get_db)):
-    """
-    Inserts a new location. The DB trigger will populate the `geom` column.
-    """
-    # (Optional) basic uniqueness guard: same name+coords
-    existing = db.execute(
-        select(Location).where(
-            Location.name == body.name,
-            Location.lat == body.lat,
-            Location.lon == body.lon,
+        # Use a text() predicate that Postgres understands.
+        # locations.geom is geography(Point,4326); cast to geometry for envelope intersection.
+        bbox_predicate = text(
+            "ST_Within(geom::geometry, ST_MakeEnvelope(:min_lon, :min_lat, :max_lon, :max_lat, 4326))"
         )
-    ).scalars().first()
-    if existing:
-        # 409 Conflict if exact duplicate
-        raise HTTPException(status_code=409, detail="Location already exists")
+        stmt = stmt.where(
+            and_(
+                *conditions,
+                bbox_predicate.bindparams(
+                    min_lon=min_lon, min_lat=min_lat, max_lon=max_lon, max_lat=max_lat
+                ),
+            )
+        )
+    elif conditions:
+        stmt = stmt.where(and_(*conditions))
 
-    row = Location(
-        name=body.name,
-        type=body.type,  # type: ignore[arg-type]
-        lat=body.lat,
-        lon=body.lon,
+    rows: List[LocationModel] = db.execute(stmt).scalars().all()
+    data = [_to_location_out(r) for r in rows]
+    return LocationListResponse(data=data, total=len(data))
+
+
+# ---------- POST /network/locations ----------
+@router.post("/locations", response_model=LocationOut, status_code=201)
+def create_location(
+    payload: LocationIn,
+    db: Session = Depends(get_db),
+):
+    """
+    Create a new location.
+    DB trigger will populate the 'geom' column from lon/lat.
+    """
+    # Optional: you could check duplicates by (name, type, lat, lon) if needed.
+    m = LocationModel(
+        name=payload.name,
+        type=payload.type,
+        lat=payload.lat,
+        lon=payload.lon,
     )
-    db.add(row)
+    db.add(m)
     db.commit()
-    db.refresh(row)  # get generated id (and trigger-updated fields if any)
-
-    return to_location_out(row)
+    db.refresh(m)
+    return _to_location_out(m)
