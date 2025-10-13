@@ -6,6 +6,8 @@ from app.api.v1.routes.network import router as network_router
 from app.config.settings import settings
 from app.api.v1.routes.shipments import router as shipments_router
 from app.api.v1.routes.plans import router as plans_router
+from app.api.v1.routes.routing import router as routing_router
+from app.api.v1.routes.events import router as events_router
 import os
 def create_app() -> FastAPI:
     app = FastAPI(
@@ -31,6 +33,8 @@ def create_app() -> FastAPI:
     
     app.include_router(shipments_router, prefix=settings.API_PREFIX)
     app.include_router(plans_router, prefix=settings.API_PREFIX)
+    app.include_router(routing_router, prefix=settings.API_PREFIX)
+    app.include_router(events_router, prefix=settings.API_PREFIX)
     print(">> DATABASE_URL:", settings.DATABASE_URL)
     @app.get("/")
     def root():
