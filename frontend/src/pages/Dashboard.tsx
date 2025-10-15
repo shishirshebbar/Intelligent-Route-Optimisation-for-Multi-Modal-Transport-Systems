@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
-import type { LocationListResponse, ShipmentListResponse, LocationOut, RouteOut, RoutingRequest, EventOut } from '../types/api.ts'
+import type { LocationListResponse, ShipmentListResponse, RouteOut, EventOut } from '../types/api.tsx'
+import type { LocationOut } from '../types/api.tsx'
+import type { RoutingRequest } from '../types/api.tsx'
 import Map from '../components/Map/Map'
 import Kpis from '../components/Kpis/kpis.tsx'
 import EventsFeed from '../components/Events/EventsFeed'
@@ -47,20 +49,21 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <Kpis shipments={shipmentsCount} locations={locations.length} lastEvent={lastEventTs} />
-
+        <div className='text-black'>
+      <Kpis  shipments={shipmentsCount} locations={locations.length} lastEvent={lastEventTs} />
+        </div>
       <div className="grid grid-cols-12 gap-6">
         <div className="col-span-8">
           <div className="mb-3 flex items-center gap-3">
-            <select className="border rounded-lg p-2"
+            <select className="border text-black rounded-lg p-2"
               value={originId}
               onChange={e => setOriginId(e.target.value ? Number(e.target.value) : '')}
             >
-              <option value="">Origin</option>
+              <option  value="">Origin</option>
               {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)}
             </select>
 
-            <select className="border rounded-lg p-2"
+            <select className="border text-black rounded-lg p-2"
               value={destId}
               onChange={e => setDestId(e.target.value ? Number(e.target.value) : '')}
             >
@@ -68,7 +71,7 @@ export default function Dashboard() {
               {locations.map(l => <option key={l.id} value={l.id}>{l.name} ({l.type})</option>)}
             </select>
 
-            <select className="border rounded-lg p-2"
+            <select className="border text-black rounded-lg p-2"
               value={mode}
               onChange={e => setMode(e.target.value as any)}
             >
@@ -79,7 +82,7 @@ export default function Dashboard() {
             </select>
 
             <button
-              className="px-4 py-2 rounded-lg bg-brand text-white"
+              className="px-4 py-2 rounded-lg bg-black text-white "
               onClick={handleRoute}
               disabled={!originId || !destId}
             >
@@ -90,8 +93,8 @@ export default function Dashboard() {
           <Map locations={locations} route={route} />
 
           {route && (
-            <div className="mt-3 rounded-xl border p-4 bg-white">
-              <div className="text-sm text-gray-500 mb-2">Route Summary</div>
+            <div className="mt-3 rounded-xl border p-4 bg-black">
+              <div className="text-sm  text-gray-500 mb-2">Route Summary</div>
               <div className="flex gap-6 text-sm">
                 <div><span className="text-gray-500">Distance:</span> {km(route.distance_km)}</div>
                 <div><span className="text-gray-500">Time:</span> {mins(route.time_min)}</div>
@@ -101,8 +104,8 @@ export default function Dashboard() {
           )}
         </div>
 
-        <div className="col-span-4">
-          <div className="rounded-xl border p-4 bg-white">
+        <div className="col-span-6">
+          <div className="rounded-xl border p-5 bg-white">
             <div className="text-sm text-gray-500 mb-3">Recent Events</div>
             <EventsFeed events={events} />
           </div>

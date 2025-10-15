@@ -6,7 +6,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white">
         <div className="max-w-7xl mx-auto p-4">
-          <h1 className="text-xl font-semibold">Adaptive Multimodal Logistics</h1>
+          <h1 className="text-xl text-black font-semibold">Intelligent Route Optimisation for MultiModal Transport Systems</h1>
         </div>
       </header>
 
