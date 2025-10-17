@@ -1,8 +1,39 @@
-step1 - clone the repo
-step 2 - in frontend - npm i
-to run in frontend - npm run dev
-step 3 - in backend - npm i
-to run in backend - python -m uvicorn app.main:app --reload
-step 4- infra setup -- in root run - docker compose up -d db
-to check - docker logs -f logistics_db
-to connect ot pgsql - docker exec -it logistics_db psql -U logi_user -d logistics
+# Intelligent Route Optimisation for Multi-Modal Transport Systems
+
+Quick start instructions (commands shown in code blocks):
+
+## 1. Clone the repo
+```bash
+git clone <repo-url>
+cd Intelligent-Route-Optimisation-for-Multi-Modal-Transport-Systems
+```
+
+## 2. Install dependencies
+```bash
+npm i
+```
+
+## 3. Run the frontend
+```bash
+npm run dev
+```
+
+## 4. Run the backend
+```bash
+python -m uvicorn app.main:app --reload
+```
+
+## 5. Infrastructure setup
+```bash
+docker compose up -d db
+```
+
+## 6. Check the logs
+```bash
+docker logs -f logistics_db
+```
+
+## 7. Connect to PostgreSQL
+```bash
+docker exec -it logistics_db psql -U logi_user -d logistics
+```
