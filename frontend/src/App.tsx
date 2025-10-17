@@ -1,18 +1,23 @@
-import React from 'react'
+import React, { useState } from 'react'
 import Dashboard from './pages/Dashboard'
+import LandingPage from './pages/LandingPage'
+import ConsoleNavbar from './pages/ConsoleNavbar'
 
 export default function App() {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b bg-white">
-        <div className="max-w-7xl mx-auto p-4">
-          <h1 className="text-xl text-black font-semibold">Intelligent Route Optimisation for MultiModal Transport Systems</h1>
-        </div>
-      </header>
+  const [showApp, setShowApp] = useState(false)
 
-      <main className="max-w-7xl mx-auto p-4">
-        <Dashboard />
-      </main>
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      {!showApp ? (
+        <LandingPage onStart={() => setShowApp(true)} />
+      ) : (
+        <>
+          <ConsoleNavbar />
+          <main className="mx-auto max-w-7xl p-4">
+            <Dashboard />
+          </main>
+        </>
+      )}
     </div>
   )
 }
