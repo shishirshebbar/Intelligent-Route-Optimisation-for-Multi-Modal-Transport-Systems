@@ -1,4 +1,4 @@
-version: "3.9"
+# version: "3.9"
 services:
   db:
     image: postgis/postgis:16-3.4
@@ -17,6 +17,18 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  osrm:
+    build: ./infra/osrm
+    container_name: osrm_routed
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/osm:/data
+      # - ./infra/osrm/profiles:/opt
+    environment:
+      - OSM_PBF=/data/region.osm.pbf
+      - PROFILE=/opt/car.lua 
 
 volumes:
   db_data:

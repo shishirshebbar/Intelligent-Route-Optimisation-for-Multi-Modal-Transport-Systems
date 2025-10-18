@@ -1,4 +1,17 @@
 .env*
 # Ignore Python cache files
 __pycache__/
-*.pyc
+
+# Ignore files with extension .region
+*.region
+
+# Ignore files named region.<ext> (e.g. region.json, region.yaml)
+region.*
+
+# Ignore any file or directory whose name contains "region"
+*region*
+
+# Ignore any directory named "region" anywhere in the tree
+region/
+**/region/
+
