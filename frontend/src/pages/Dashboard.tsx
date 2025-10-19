@@ -1,10 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import api from '../api/client'
-import type { LocationListResponse, ShipmentListResponse, RouteOut, EventOut } from '../types/api.tsx'
-import type { LocationOut } from '../types/api.tsx'
-import type { RoutingRequest } from '../types/api.tsx'
+import type { LocationListResponse, ShipmentListResponse, RouteOut, EventOut } from '../types/api'
+import type { LocationOut, RoutingRequest } from '../types/api'
 import Map from '../components/Map/Map'
-import Kpis from '../components/Kpis/kpis.tsx'
+import Kpis from '../components/Kpis/kpis'
 import EventsFeed from '../components/Events/EventsFeed'
 import { km, mins, kg } from '../utils/format'
 
@@ -12,23 +11,54 @@ export default function Dashboard() {
   const [locations, setLocations] = useState<LocationOut[]>([])
   const [shipmentsCount, setShipmentsCount] = useState(0)
   const [events, setEvents] = useState<EventOut[]>([])
+  const [eventsErr, setEventsErr] = useState<string | null>(null)
   const [originId, setOriginId] = useState<number | ''>('')
   const [destId, setDestId] = useState<number | ''>('')
   const [mode, setMode] = useState<'road'|'rail'|'sea'|'air'|'transfer'>('road')
   const [route, setRoute] = useState<RouteOut | null>(null)
   const lastEventTs = useMemo(() => events[0]?.ts, [events])
 
+  // initial data (locations, shipments)
   useEffect(() => {
     (async () => {
-      const locRes = await api.get<LocationListResponse>('/network/locations')
-      setLocations(locRes.data.data)
+      try {
+        const locRes = await api.get<LocationListResponse>('/network/locations')
+        setLocations(locRes.data.data)
+      } catch (e:any) {
+        console.error('Failed to load locations', e?.message)
+      }
 
-      const shpRes = await api.get<ShipmentListResponse>('/shipments')
-      setShipmentsCount(shpRes.data.total)
+      try {
+        const shpRes = await api.get<ShipmentListResponse>('/shipments')
+        setShipmentsCount(shpRes.data.total)
+      } catch (e:any) {
+        console.error('Failed to load shipments', e?.message)
+      }
+    })()
+  }, [])
 
-      const evRes = await api.get<EventOut[]>('/events')
+  // events: fetch + poll
+  const loadEvents = async () => {
+    try {
+      setEventsErr(null)
+      // request most-recent first (your backend already orders DESC); just cap the size
+      const evRes = await api.get<EventOut[]>('/events', { params: { limit: 30 } })
       setEvents(evRes.data)
-    })().catch(console.error)
+    } catch (e:any) {
+      setEventsErr(e?.message || 'Failed to load events')
+    }
+  }
+
+  useEffect(() => {
+    let timer: number | undefined
+    ;(async () => {
+      await loadEvents()
+      // Poll every 60s; tune if you like
+      timer = window.setInterval(() => loadEvents().catch(() => {}), 60_000)
+    })()
+    return () => {
+      if (timer) window.clearInterval(timer)
+    }
   }, [])
 
   const handleRoute = async () => {
@@ -43,8 +73,12 @@ export default function Dashboard() {
       modes: [mode],
       objective: { cost: 0.5, time: 0.3, co2e: 0.2 }
     }
-    const res = await api.post<RouteOut>('/routing/multimodal', payload)
-    setRoute(res.data)
+    try {
+      const res = await api.post<RouteOut>('/routing/multimodal', payload)
+      setRoute(res.data)
+    } catch (e:any) {
+      console.error('Failed to compute route', e?.message)
+    }
   }
 
   return (
@@ -101,12 +135,26 @@ export default function Dashboard() {
           >
             Compute Route
           </button>
+
+          <button
+            className="ml-auto text-xs px-3 py-2 rounded-lg border border-white/15 text-white/80 hover:bg-white/10"
+            onClick={loadEvents}
+            title="Refresh events"
+          >
+            Refresh events
+          </button>
         </div>
+
+        {eventsErr && (
+          <div className="mt-2 text-xs text-red-300">
+            {eventsErr}
+          </div>
+        )}
       </div>
 
       {/* Layout */}
       <div className="grid grid-cols-12 gap-6">
-       <div className="col-span-12 lg:col-span-8 xl:col-span-7">
+        <div className="col-span-12 lg:col-span-8 xl:col-span-7">
           <Map locations={locations} route={route} />
 
           {route && (
@@ -126,6 +174,8 @@ export default function Dashboard() {
             <div className="mb-3 text-sm text-white/60">Recent Events</div>
             <div className="text-white">
               <EventsFeed events={events} />
+              {/* If later you switch to self-fetching EventsFeed, replace with:
+                 <EventsFeed />  and remove the Dashboard polling code. */}
             </div>
           </div>
         </div>

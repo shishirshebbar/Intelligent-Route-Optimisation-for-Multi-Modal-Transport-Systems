@@ -33,12 +33,18 @@ export interface ShipmentListResponse {
 }
 
 // ---- Events
+
+
 export type EventType = 'traffic' | 'weather' | 'fuel_price' | 'breakdown'
+export type Severity = 'low' | 'moderate' | 'high'
+
 export interface EventOut {
   id: number
   type: EventType
   ts: string
   plan_id?: string | null
+  source?: string | null
+  severity?: Severity | null
   payload: Record<string, unknown>
 }
 
