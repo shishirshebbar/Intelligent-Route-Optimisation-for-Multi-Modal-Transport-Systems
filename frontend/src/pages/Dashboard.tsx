@@ -173,9 +173,8 @@ export default function Dashboard() {
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur">
             <div className="mb-3 text-sm text-white/60">Recent Events</div>
             <div className="text-white">
-              <EventsFeed events={events} />
-              {/* If later you switch to self-fetching EventsFeed, replace with:
-                 <EventsFeed />  and remove the Dashboard polling code. */}
+              <EventsFeed limit={30} pollMs={60_000} />
+    {/* or filter: <EventsFeed filterType="weather" /> */}
             </div>
           </div>
         </div>
