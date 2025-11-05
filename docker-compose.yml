@@ -27,8 +27,38 @@ services:
       - ./data/osm:/data
       # - ./infra/osrm/profiles:/opt
     environment:
-      - OSM_PBF=/data/region.osm.pbf
-      - PROFILE=/opt/car.lua 
+      OSM_PBF: /data/region.osm.pbf
+      PROFILE: /opt/car.lua
+
+  backend:
+    image: tiangolo/uvicorn-gunicorn-fastapi:python3.11   # Docker Hub image (no GHCR auth needed)
+    depends_on:
+      - db
+    environment:
+      PG_DSN: postgres://$${POSTGRES_USER:-logi_user}:$${POSTGRES_PASSWORD:-logi_pass}@db:5432/$${POSTGRES_DB:-logistics}
+      DELAY_SERVICE_URL: http://ml-delay:9000
+      CORS_ORIGINS: "*"
+    volumes:
+      - ./backend:/app/backend
+    working_dir: /app
+    command: ["uvicorn","backend.app.main:app","--host","0.0.0.0","--port","8000","--reload"]
+    ports:
+      - "8000:8000"
+
+  ml-delay:
+    image: python:3.11-slim
+    depends_on:
+      - db
+    environment:
+      PG_DSN: postgres://$${POSTGRES_USER:-logi_user}:$${POSTGRES_PASSWORD:-logi_pass}@db:5432/$${POSTGRES_DB:-logistics}
+      MODELS_DIR: /srv/models/delay
+    volumes:
+      - ./ml/delay_service:/srv/app
+      - ./models:/srv/models
+    working_dir: /srv/app
+    command: ["bash","-lc","pip install --no-cache-dir -e . && uvicorn app:app --host 0.0.0.0 --port 9000"]
+    ports:
+      - "9000:9000"
 
 volumes:
   db_data:
