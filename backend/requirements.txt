@@ -4,5 +4,7 @@ python-dotenv
 pydantic
 SQLAlchemy
 psycopg2-binary
-pytest 
+geoalchemy2
+alembic
 httpx
+pytest
