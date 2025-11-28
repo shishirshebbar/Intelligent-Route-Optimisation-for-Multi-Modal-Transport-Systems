@@ -24,3 +24,21 @@ select option { background-color: #0f172a; color: #fff; }
 html {
   scroll-behavior: smooth;
 }
+/* Custom scrollbar for Events panel */
+.events-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.events-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+}
+
+.events-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.events-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.25) transparent;
+}

@@ -12,7 +12,7 @@ export default function App() {
         <LandingPage onStart={() => setShowApp(true)} />
       ) : (
         <>
-          <ConsoleNavbar />
+          <ConsoleNavbar onHome={() => setShowApp(false)} />
           <main className="mx-auto max-w-7xl p-4">
             <Dashboard />
           </main>
