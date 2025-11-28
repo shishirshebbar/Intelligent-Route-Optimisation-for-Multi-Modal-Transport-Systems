@@ -325,10 +325,7 @@ const stats = useMemo(
               starting with road networks.
             </h1>
             <p className="mt-4 max-w-xl text-sm md:text-base text-slate-300">
-              A full-stack system built with FastAPI, PostgreSQL + PostGIS,
-              OSRM, and a React dashboard. Phase-1 focuses on road-based route
-              computation, shipment visibility, and clear hooks for delay
-              prediction and future multi-modal optimisation.
+              An intelligent routing prototype that helps logistics teams plan cost-, time-, and CO₂-aware shipments across their own depots and hubs. It demonstrates road-network planning and live shipment visibility, with clear scope for delay prediction and future multi-modal expansion.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center gap-3">
