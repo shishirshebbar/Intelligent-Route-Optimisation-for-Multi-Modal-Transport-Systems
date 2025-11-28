@@ -20,3 +20,7 @@ select option { background-color: #0f172a; color: #fff; }
 *::-webkit-scrollbar { height: 8px; width: 8px; }
 *::-webkit-scrollbar-thumb { background: rgba(148,163,184,.35); border-radius: 8px; }
 *::-webkit-scrollbar-track { background: transparent; }
+
+html {
+  scroll-behavior: smooth;
+}
