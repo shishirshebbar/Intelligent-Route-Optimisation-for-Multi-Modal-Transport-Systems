@@ -229,17 +229,17 @@ const stats = useMemo(
     {
       icon: MapIcon,
       label: "Locations Configured",
-      value: "8",
+      value: "19",
     },
     {
       icon: BarChart3,
       label: "Shipments in Dataset",
-      value: "2",
+      value: "8",
     },
     {
       icon: Radar,
       label: "Events Logged",
-      value: "16",
+      value: "26",
     },
     {
       icon: Route,
@@ -287,6 +287,9 @@ const stats = useMemo(
               <a className="hover:text-teal-300 transition" href="#problem">
                 Problem
               </a>
+              <a className="hover:text-teal-300 transition" href="#existing">
+    Existing System
+  </a>
               <a className="hover:text-teal-300 transition" href="#uniqueness">
                 Uniqueness
               </a>
@@ -507,6 +510,57 @@ const stats = useMemo(
   </div>
 </section>
 
+{/* EXISTING VS PROPOSED SYSTEM */}
+<section
+  id="existing"
+  className="scroll-mt-24 border-t border-slate-800/80 bg-slate-950"
+>
+  <div className="mx-auto max-w-7xl px-5 py-16 md:px-8">
+    <SectionHeader
+      eyebrow="Existing System vs Proposed System"
+      title="How logistics routing works today — and how our system improves it"
+      subtitle="A clear comparison between current industry tools and our intelligent routing approach."
+    />
+
+    <div className="mx-auto grid max-w-5xl grid-cols-1 gap-6 text-sm text-slate-200/90 md:grid-cols-2">
+      <GlassCard>
+        <h3 className="mb-3 text-base font-semibold text-slate-50">
+          Existing System (Industry Practice)
+        </h3>
+        <ul className="space-y-2 list-disc list-inside">
+          <li>Companies rely on Google Maps or manual Excel-based planning.</li>
+          <li>Optimises only a single trip, not multiple vehicles or depots.</li>
+          <li>No modelling of fuel cost, tolls, driver hours, or CO₂.</li>
+          <li>Limited ability to integrate private depots/hubs or SLA data.</li>
+          <li>No predictive analytics or delay forecasting.</li>
+        </ul>
+      </GlassCard>
+
+      <GlassCard>
+        <h3 className="mb-3 text-base font-semibold text-slate-50">
+          Proposed System (Our Approach)
+        </h3>
+        <ul className="space-y-2 list-disc list-inside">
+          <li>
+            Custom logistics graph stored in PostgreSQL + PostGIS with
+            organisation-specific depots and hubs.
+          </li>
+          <li>
+            OSRM-backed routing designed for fleets, cost–time–CO₂ trade-offs.
+          </li>
+          <li>Supports multi-modal design (road → rail → sea → air).</li>
+          <li>
+            Clear integration points for ML models for delay prediction and
+            dynamic rerouting.
+          </li>
+          <li>
+            A React dashboard providing KPIs, shipment visibility, and event logs.
+          </li>
+        </ul>
+      </GlassCard>
+    </div>
+  </div>
+</section>
 
         {/* UNIQUENESS */}
         <section
