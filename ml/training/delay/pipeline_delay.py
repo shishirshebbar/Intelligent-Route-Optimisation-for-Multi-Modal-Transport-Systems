@@ -1,3 +1,5 @@
+import os
+
 import joblib
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import roc_auc_score, mean_absolute_error
@@ -8,11 +10,19 @@ from features.build_features import build_features
 DATASET = "datasets/sample_trips.csv"
 MODEL_OUT = "../../../models/delay/model.pkl"
 
+os.makedirs(os.path.dirname(MODEL_OUT), exist_ok=True)
+
+
 def train():
     X, y_cls, y_reg = build_features(DATASET)
-
     X_train, X_test, y_cls_train, y_cls_test, y_reg_train, y_reg_test = \
-        train_test_split(X, y_cls, y_reg, test_size=0.2, random_state=42)
+    train_test_split(
+        X, y_cls, y_reg,
+        test_size=0.2,
+        random_state=42,
+        stratify=y_cls
+    )
+
 
     clf = RandomForestClassifier(n_estimators=200, random_state=42)
     reg = RandomForestRegressor(n_estimators=200, random_state=42)
@@ -23,7 +33,11 @@ def train():
     cls_pred = clf.predict_proba(X_test)[:, 1]
     reg_pred = reg.predict(X_test)
 
-    print("ROC-AUC:", roc_auc_score(y_cls_test, cls_pred))
+    if len(set(y_cls_test)) > 1:
+        print("ROC-AUC:", roc_auc_score(y_cls_test, cls_pred))
+    else:
+        print("ROC-AUC: skipped (only one class in test set)")
+
     print("MAE (delay min):", mean_absolute_error(y_reg_test, reg_pred))
 
     joblib.dump(
