@@ -1,18 +1,30 @@
-# backend/app/db/models/plan.py
-from sqlalchemy import Column, Text
-from sqlalchemy.dialects.postgresql import DOUBLE_PRECISION, INTEGER, TIMESTAMP, JSONB
+from sqlalchemy import Column, Float, Text, DateTime
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.db.base import Base
+from datetime import datetime
 
 class Plan(Base):
     __tablename__ = "plans"
 
     id = Column(Text, primary_key=True)
-    status = Column(Text, nullable=True)
-    created_at = Column(TIMESTAMP(timezone=True))
-    total_cost = Column(DOUBLE_PRECISION, nullable=True)
-    total_time_min = Column(INTEGER, nullable=True)
-    total_co2e_kg = Column(DOUBLE_PRECISION, nullable=True)
+
+    # ✅ ADD THESE
+    status = Column(Text, nullable=False, default="draft")
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     details_json = Column(JSONB, nullable=True)
 
-    legs = relationship("PlanLeg", back_populates="plan", cascade="all, delete-orphan")
+    # existing fields
+    total_distance_km = Column(Float, nullable=False, default=0.0)
+    total_time_min = Column(Float, nullable=False, default=0.0)
+    total_co2e_kg = Column(Float, nullable=False, default=0.0)
+
+    # ML outputs
+    delay_prob = Column(Float, nullable=True)
+    expected_delay_min = Column(Float, nullable=True)
+
+    legs = relationship(
+        "PlanLeg",
+        back_populates="plan",
+        cascade="all, delete-orphan"
+    )

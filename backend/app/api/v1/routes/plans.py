@@ -12,6 +12,8 @@ from app.db.session import SessionLocal
 from app.db.models.plan import Plan as PlanModel
 from app.db.models.plan_leg import PlanLeg as PlanLegModel
 from app.schemas.plans import PlanCreate, PlanOut, PlanSummary, PlanLeg
+from app.services.delay_client import predict_delay
+from datetime import datetime
 
 router = APIRouter(tags=["plans"], prefix="/plans")
 
@@ -27,13 +29,14 @@ def get_db() -> Generator[Session, None, None]:
 def _to_plan_out(plan: PlanModel, legs: List[PlanLegModel]) -> PlanOut:
     # summary is optional at this stage; you can compute later
     summary = None
-    if plan.total_cost is not None or plan.total_time_min is not None or plan.total_co2e_kg is not None:
+    summary = None
+    if plan.total_time_min is not None or plan.total_co2e_kg is not None:
         summary = PlanSummary(
-            total_cost=plan.total_cost,
             total_time_min=plan.total_time_min,
             total_co2e_kg=plan.total_co2e_kg,
             on_time_probability=None,
         )
+
 
     legs_out = [
         PlanLeg(
@@ -55,15 +58,25 @@ def _to_plan_out(plan: PlanModel, legs: List[PlanLegModel]) -> PlanOut:
 
     return PlanOut(
         id=plan.id,
-        status=plan.status,  # type: ignore[arg-type]
+        status=plan.status,
         created_at=plan.created_at,
+
+        # ✅ ADD THESE (match PlanOut schema)
+        total_distance_km=plan.total_distance_km,
+        total_time_min=plan.total_time_min,
+        total_co2e_kg=plan.total_co2e_kg,
+
         summary=summary,
         legs=legs_out,
+        delay_prob=plan.delay_prob,
+        expected_delay_min=plan.expected_delay_min,
     )
+
+
 
 # ---------- POST /plans ----------
 @router.post("", response_model=PlanOut, status_code=201)
-def create_plan(payload: PlanCreate, db: Session = Depends(get_db)):
+async def create_plan(payload: PlanCreate, db: Session = Depends(get_db)):
     """
     Create a 'draft' plan and stash the requested shipment_ids in details_json.
     Legs will be added later by the optimiser.
@@ -81,8 +94,49 @@ def create_plan(payload: PlanCreate, db: Session = Depends(get_db)):
     db.add(plan)
     db.commit()
     db.refresh(plan)
+        # ---------------- Delay ML integration ----------------
+    now = datetime.utcnow()
 
-    # No legs yet
+    # TEMP / AGGREGATED values (acceptable for Sem-1)
+    total_weight_kg = 0.0      # replace with real aggregation later
+    avg_priority = 2           # simple default
+
+    # TEMP stubs (until traffic/weather services wired)
+    traffic = {
+        "congestion_index": 0.6,
+        "avg_speed_kph": 30.0,
+    }
+
+    weather = {
+        "temperature_c": 30.0,
+        "precipitation_mm": 1.0,
+        "wind_speed_mps": 4.0,
+    }
+
+    delay_features = {
+        "distance_km": plan.total_distance_km or 0.0,
+        "baseline_time_min": plan.total_time_min or 0.0,
+        "weight_kg": total_weight_kg,
+        "priority": avg_priority,
+        "hour_of_day": now.hour,
+        "day_of_week": now.weekday(),
+        "temperature_c": weather["temperature_c"],
+        "precipitation_mm": weather["precipitation_mm"],
+        "wind_speed_mps": weather["wind_speed_mps"],
+        "congestion_index": traffic["congestion_index"],
+        "avg_speed_kph": traffic["avg_speed_kph"],
+    }
+
+    delay = await predict_delay(delay_features)
+
+    plan.delay_prob = delay["delay_prob"]
+    plan.expected_delay_min = delay["expected_delay_min"]
+
+    db.commit()
+    db.refresh(plan)
+    # -----------------------------------------------------
+
+        # No legs yet
     return _to_plan_out(plan, legs=[])
 
 # ---------- GET /plans/{id} ----------

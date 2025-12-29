@@ -5,18 +5,20 @@ from pydantic import BaseModel, Field
 PlanStatus = Literal["draft", "active", "rerouted", "completed", "failed"]
 LegMode = Literal["road", "rail", "sea", "air", "transfer"]
 
+
+
 class PlanCreate(BaseModel):
-    shipment_ids: list[str] = Field(..., min_length=1)
-    # optional knobs you may add later
-    objective: Optional[dict] = None
-    modes: Optional[list[LegMode]] = None
+    shipment_ids: list[str]
+    objective: Optional[str] = None
+    modes: Optional[list[str]] = None
     constraints: Optional[dict] = None
+
 
 class PlanSummary(BaseModel):
     total_cost: Optional[float] = None
     total_time_min: Optional[int] = None
     total_co2e_kg: Optional[float] = None
-    on_time_probability: Optional[float] = Field(None, ge=0, le=1)
+    on_time_probability: float | None = None
 
 class PlanLeg(BaseModel):
     leg_id: str
@@ -34,7 +36,10 @@ class PlanLeg(BaseModel):
 
 class PlanOut(BaseModel):
     id: str
-    status: PlanStatus
-    created_at: Optional[datetime] = None
-    summary: Optional[PlanSummary] = None
-    legs: list[PlanLeg] = []
+    total_distance_km: float
+    total_time_min: float
+    total_co2e_kg: float
+
+    # ML outputs
+    delay_prob: Optional[float]
+    expected_delay_min: Optional[float]
