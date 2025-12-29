@@ -76,3 +76,12 @@ export interface RouteOut {
   co2e_kg: number
   legs: RouteLegOut[]
 }
+export type PlanOut = {
+  id: string
+  total_distance_km: number
+  total_time_min: number
+  total_co2e_kg: number
+  delay_prob: number
+  expected_delay_min: number
+}
+

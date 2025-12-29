@@ -7,6 +7,7 @@ import Map from '../components/Map/Map'
 import Kpis from '../components/Kpis/kpis'
 import EventsFeed from '../components/Events/EventsFeed'
 import { km, mins, kg } from '../utils/format'
+import type { PlanOut } from '../types/api'
 
 export default function Dashboard() {
   const [locations, setLocations] = useState<LocationOut[]>([])
@@ -19,6 +20,8 @@ export default function Dashboard() {
   const [route, setRoute] = useState<RouteOut | null>(null)
   const [isRouting, setIsRouting] = useState(false)
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
+  const [plan, setPlan] = useState<PlanOut | null>(null)
+
   const lastEventTs = useMemo(() => events[0]?.ts, [events])
 
   // initial data (locations, shipments)
@@ -80,15 +83,34 @@ export default function Dashboard() {
     }
 
     try {
-      setIsRouting(true)
-      const res = await api.post<RouteOut>('/routing/multimodal', payload)
-      setRoute(res.data)
-    } catch (e: any) {
-      console.error('Failed to compute route', e?.message)
-    } finally {
-      setIsRouting(false)
-    }
+  setIsRouting(true)
+
+  // 1️⃣ Compute route
+  const res = await api.post<RouteOut>('/routing/multimodal', payload)
+  setRoute(res.data)
+
+  // 2️⃣ Create plan → get ML delay prediction
+  try {
+    const planRes = await api.post<PlanOut>('/plans', {
+      shipment_ids: ['S1'] // can wire real IDs later
+    })
+    console.log('PLAN RESPONSE:', planRes.data)
+    setPlan(planRes.data)
+  } catch (e: any) {
+    console.error('Failed to create plan', e?.message)
   }
+
+} catch (e: any) {
+  console.error('Failed to compute route', e?.message)
+} finally {
+  setIsRouting(false)
+}
+
+  }
+  useEffect(() => {
+  console.log('PLAN STATE UPDATED:', plan)
+}, [plan])
+
 
   return (
     <div className="min-h-screen bg-slate-950 bg-[radial-gradient(circle_at_top,_#1f2937,_#020617)] text-white">
@@ -132,7 +154,14 @@ export default function Dashboard() {
           transition={{ duration: 0.35, delay: 0.1 }}
         >
           <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-slate-900/80 via-slate-900/60 to-slate-900/30 p-4 sm:p-5 shadow-lg shadow-slate-900/60 backdrop-blur-xl">
-            <Kpis shipments={shipmentsCount} locations={locations.length} lastEvent={lastEventTs} />
+            <Kpis
+  shipments={shipmentsCount}
+  locations={locations.length}
+  lastEvent={lastEventTs}
+  delayProb={plan?.delay_prob}
+  expectedDelayMin={plan?.expected_delay_min}
+/>
+
           </div>
         </motion.div>
 

@@ -1,4 +1,4 @@
-import React from 'react'
+import React from "react"
 
 type KpiProps = {
   title: string
@@ -16,7 +16,6 @@ const KpiCard: React.FC<KpiProps> = ({ title, value, sub }) => (
     backdrop-blur-xl
     text-white
   ">
-    {/* decorative glow */}
     <div className="pointer-events-none absolute -top-6 -right-6 h-16 w-16 rounded-full bg-white/5" />
 
     <div className="text-xs font-medium uppercase tracking-wide text-slate-300/70">
@@ -31,30 +30,53 @@ const KpiCard: React.FC<KpiProps> = ({ title, value, sub }) => (
   </div>
 )
 
+function riskLabel(p?: number) {
+  if (p === undefined) return undefined
+  if (p > 0.6) return "High"
+  if (p > 0.3) return "Medium"
+  return "Low"
+}
+
 export default function Kpis(props: {
   shipments: number
   locations: number
   lastEvent?: string
+  delayProb?: number
+  expectedDelayMin?: number
 }) {
+  console.log("KPIS PROPS:", {
+    delayProb: props.delayProb,
+    expectedDelayMin: props.expectedDelayMin,
+  })
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <KpiCard 
-        title="Shipments" 
-        value={props.shipments} 
-      />
-      
-      <KpiCard 
-        title="Locations" 
-        value={props.locations} 
-      />
-      
-      <KpiCard 
-        title="Last Event" 
+    
+    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4">
+      <KpiCard title="Shipments" value={props.shipments} />
+      <KpiCard title="Locations" value={props.locations} />
+      <KpiCard
+        title="Last Event"
         value={
-          props.lastEvent 
-            ? new Date(props.lastEvent).toLocaleString() 
-            : '—'
-        } 
+          props.lastEvent
+            ? new Date(props.lastEvent).toLocaleString()
+            : "—"
+        }
+      />
+      <KpiCard
+        title="Delay Risk"
+        value={
+          props.delayProb !== undefined
+            ? `${Math.round(props.delayProb * 100)}%`
+            : "—"
+        }
+        sub={riskLabel(props.delayProb)}
+      />
+      <KpiCard
+        title="Expected Delay"
+        value={
+          props.expectedDelayMin !== undefined
+            ? `${props.expectedDelayMin} min`
+            : "—"
+        }
       />
     </div>
   )
