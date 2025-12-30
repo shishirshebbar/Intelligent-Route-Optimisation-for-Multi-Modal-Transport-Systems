@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 from datetime import datetime
+from sqlalchemy import Boolean, Text, Column
 
 class Plan(Base):
     __tablename__ = "plans"
@@ -28,3 +29,7 @@ class Plan(Base):
         back_populates="plan",
         cascade="all, delete-orphan"
     )
+    
+    was_rerouted = Column(Boolean, default=False)
+    reroute_reason = Column(Text, nullable=True)
+
