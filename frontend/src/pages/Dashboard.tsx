@@ -8,6 +8,7 @@ import Kpis from '../components/Kpis/kpis'
 import EventsFeed from '../components/Events/EventsFeed'
 import { km, mins, kg } from '../utils/format'
 import type { PlanOut } from '../types/api'
+import DelayTrendChart from '../components/Charts/DelayTrendChart'
 
 export default function Dashboard() {
   const [locations, setLocations] = useState<LocationOut[]>([])
@@ -21,6 +22,9 @@ export default function Dashboard() {
   const [isRouting, setIsRouting] = useState(false)
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
   const [plan, setPlan] = useState<PlanOut | null>(null)
+const [delayTrend, setDelayTrend] = useState<
+  { time: string; expected_delay_min: number }[]
+>([])
 
   const lastEventTs = useMemo(() => events[0]?.ts, [events])
 
@@ -96,6 +100,13 @@ export default function Dashboard() {
     })
     console.log('PLAN RESPONSE:', planRes.data)
     setPlan(planRes.data)
+    setDelayTrend(prev => [
+  ...prev,
+  {
+    time: new Date().toLocaleTimeString(),
+    expected_delay_min: planRes.data.expected_delay_min,
+  },
+])
   } catch (e: any) {
     console.error('Failed to create plan', e?.message)
   }
@@ -383,6 +394,7 @@ export default function Dashboard() {
                     </div>
                   </div>
                 </motion.div>
+                
               )}
             </AnimatePresence>
           </div>
@@ -411,6 +423,17 @@ export default function Dashboard() {
               <div className="events-scroll max-h-[460px] overflow-y-auto overflow-x-hidden rounded-xl border border-white/5 bg-slate-950/60">
   <EventsFeed limit={30} pollMs={60_000} />
 </div>
+<motion.div
+  className="rounded-2xl border border-white/10 bg-slate-900/80 p-4 shadow-lg backdrop-blur-xl"
+  initial={{ opacity: 0, y: 6 }}
+  animate={{ opacity: 1, y: 0 }}
+>
+  <div className="mb-2 text-sm font-medium text-white/80 flex items-center gap-2">
+    📈 Delay Trend (ML Prediction)
+  </div>
+
+  <DelayTrendChart data={delayTrend} />
+</motion.div>
 
             </motion.div>
           </div>
