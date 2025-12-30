@@ -8,3 +8,4 @@ geoalchemy2
 alembic
 httpx
 pytest
+ortools
