@@ -1,10 +1,10 @@
 # Intelligent Route Optimisation for Multi-Modal Transport Systems
 
-Quick start instructions (commands shown in code blocks):
+An intelligent routing prototype that helps logistics teams plan cost-, time-, and CO₂-aware shipments across their own depots and hubs. It demonstrates road-network planning and live shipment visibility, with clear scope for delay prediction and future multi-modal expansion.
 
 ## 1. Clone the repo
 ```bash
-git clone <repo-url>
+git clone https://github.com/shishirshebbar/Intelligent-Route-Optimisation-for-Multi-Modal-Transport-Systems.git
 cd Intelligent-Route-Optimisation-for-Multi-Modal-Transport-Systems
 ```
 
@@ -30,9 +30,11 @@ WEATHER_POLL_SECONDS=300
 WEATHER_LOCATION_TYPES=depot,port,airport
 TRAFFIC_POLL_SECONDS=300
 TRAFFIC_LOCATION_TYPES=depot,customer
+ML_DELAY_URL=http://localhost:51000
+ML_DELAY_TIMEOUT=5
 ```
 
-next in the frontend directory - create a .env file(copy this):
+next inside frontend directory - create another .env file(copy this):
 
 ```bash
 VITE_API_BASE=/api/v1
@@ -42,7 +44,7 @@ VITE_API_BASE=/api/v1
 
 rename the downloaded folder as region.osm.pbf
 
-then in terminal 
+next - in terminal 
 
 ```bash
 cd infra/osrm
@@ -57,29 +59,31 @@ cd ../..
 
 ```
 
-## 4. Infrastructure setup
+## 4. Infrastructure setup(from root dir)
 ```bash
 docker compose up -d db osrm
 ```
 
-## 5. Check the logs
+## 5. Check the logs(from root dir)
 ```bash
 docker logs -f logistics_db
 ```
 
-## 6. Connect to PostgreSQL
+## 6. Connect to PostgreSQL(from root dir)
 ```bash
 docker exec -it logistics_db psql -U logi_user -d logistics
 ```
-## 7. Verify if everything is working
-
-Frontend: http://localhost:5173
-
-Backend Docs: http://localhost:8000/docs  -  this opens swagger ui
-
-OSRM quick check(from root terminal):
+to quit
 ```bash
-curl "http://localhost:5000/route/v1/driving/76.27,10.00;76.50,10.10?overview=false"
+\q
+```
+## 7. Run ml delay service
+
+```bash
+cd ml\delay_service
+```
+```bash
+uvicorn app:app --port 51000
 ```
 
 
@@ -103,4 +107,18 @@ pip install -r requirements.txt
 ```
 ```bash
 python -m uvicorn app.main:app --reload
+```
+
+
+## 10. Verify if everything is working
+
+Frontend: http://localhost:5173
+
+Backend Docs: http://localhost:8000/docs  -  this opens swagger ui
+
+ML (Delay Prediction Service) : http://localhost:51000/docs - this opens swagger ui
+
+OSRM quick check(from root terminal):
+```bash
+curl "http://localhost:5000/route/v1/driving/76.27,10.00;76.50,10.10?overview=false"
 ```

@@ -10,17 +10,6 @@ def solve_vrptw(
     num_vehicles: int,
     depot: int = 0,
 ) -> Dict[str, Any]:
-    """
-    Solve Vehicle Routing Problem with Time Windows (VRPTW).
-
-    Returns:
-      {
-        "routes": [
-            { "vehicle_id": 0, "stops": [0, 3, 5, 2, 0], "total_time": 142 }
-        ],
-        "objective": total_cost
-      }
-    """
 
     manager = pywrapcp.RoutingIndexManager(
         len(time_matrix),
@@ -30,7 +19,6 @@ def solve_vrptw(
 
     routing = pywrapcp.RoutingModel(manager)
 
-    # ----- Time callback -----
     def time_callback(from_index, to_index):
         from_node = manager.IndexToNode(from_index)
         to_node = manager.IndexToNode(to_index)
@@ -39,7 +27,6 @@ def solve_vrptw(
     transit_callback_index = routing.RegisterTransitCallback(time_callback)
     routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-    # ----- Capacity constraint -----
     def demand_callback(from_index):
         from_node = manager.IndexToNode(from_index)
         return demands[from_node]
@@ -48,17 +35,16 @@ def solve_vrptw(
 
     routing.AddDimensionWithVehicleCapacity(
         demand_callback_index,
-        0,                       # no slack
+        0,
         vehicle_capacities,
         True,
         "Capacity"
     )
 
-    # ----- Time window constraint -----
     routing.AddDimension(
         transit_callback_index,
-        30,                      # waiting allowed
-        24 * 60,                 # max time per vehicle
+        30,
+        24 * 60,
         False,
         "Time"
     )
@@ -69,14 +55,10 @@ def solve_vrptw(
         index = manager.NodeToIndex(idx)
         time_dim.CumulVar(index).SetRange(window[0], window[1])
 
-    # Depot window
     for v in range(num_vehicles):
-        start = routing.Start(v)
-        end = routing.End(v)
-        time_dim.CumulVar(start).SetRange(0, 24 * 60)
-        time_dim.CumulVar(end).SetRange(0, 24 * 60)
+        time_dim.CumulVar(routing.Start(v)).SetRange(0, 24 * 60)
+        time_dim.CumulVar(routing.End(v)).SetRange(0, 24 * 60)
 
-    # ----- Search parameters -----
     search_params = pywrapcp.DefaultRoutingSearchParameters()
     search_params.first_solution_strategy = (
         routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -91,7 +73,6 @@ def solve_vrptw(
     if not solution:
         return {"routes": [], "objective": None}
 
-    # ----- Extract solution -----
     routes = []
     for v in range(num_vehicles):
         index = routing.Start(v)
@@ -117,3 +98,30 @@ def solve_vrptw(
         "routes": routes,
         "objective": solution.ObjectiveValue()
     }
+
+
+def build_delay_aware_time_matrix(
+    base_time_matrix: list[list[int]],
+    delay_penalties: list[list[float]],
+    alpha: float = 1.0,
+) -> list[list[int]]:
+
+    size = len(base_time_matrix)
+    out = [[0] * size for _ in range(size)]
+
+    for i in range(size):
+        for j in range(size):
+            out[i][j] = int(
+                base_time_matrix[i][j] + alpha * delay_penalties[i][j]
+            )
+
+    return out
+
+
+def compute_delay_penalty_used(routes, delay_penalties):
+    total = 0.0
+    for r in routes:
+        stops = r["stops"]
+        for i, j in zip(stops, stops[1:]):
+            total += delay_penalties[i][j]
+    return total
