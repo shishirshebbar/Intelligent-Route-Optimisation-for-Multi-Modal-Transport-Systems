@@ -127,3 +127,18 @@ async def optimise_plan(plan, db):
         }
     ))
     db.commit()
+def compute_improvements(baseline, optimised):
+    return {
+        "delay_reduction_pct": round(
+            (baseline["delay_min"] - optimised["delay_min"])
+            / baseline["delay_min"] * 100, 2
+        ),
+        "emissions_saved_pct": round(
+            (baseline["emissions_kg"] - optimised["emissions_kg"])
+            / baseline["emissions_kg"] * 100, 2
+        ),
+        "cost_change_pct": round(
+            (optimised["cost"] - baseline["cost"])
+            / baseline["cost"] * 100, 2
+        )
+    }

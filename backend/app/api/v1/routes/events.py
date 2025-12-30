@@ -22,7 +22,14 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 # ---------- Schemas (decoupled from ORM) ----------
-EventType = Literal["traffic", "weather", "fuel_price", "breakdown"]
+EventType = Literal[
+    "traffic",
+    "weather",
+    "fuel_price",
+    "breakdown",
+    "reroute",   # 👈 ADD THIS
+]
+
 Severity = Literal["low", "moderate", "high"]
 
 class EventIn(BaseModel):

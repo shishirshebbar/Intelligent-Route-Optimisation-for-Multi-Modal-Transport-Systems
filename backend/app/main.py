@@ -12,6 +12,7 @@ from app.api.v1.routes.events import router as events_router
 import os
 from app.db.session import engine
 from app.db.base import Base
+from app.api.v1.routes.metrics import router as metrics_router
 
 # 🔴 REQUIRED: import models so SQLAlchemy sees them
 import app.db.models.plan
@@ -42,6 +43,8 @@ def create_app() -> FastAPI:
     app.include_router(plans_router, prefix=settings.API_PREFIX)
     app.include_router(routing_router, prefix=settings.API_PREFIX)
     app.include_router(events_router, prefix=settings.API_PREFIX)
+    app.include_router(metrics_router, prefix=settings.API_PREFIX)
+
     print(">> DATABASE_URL:", settings.DATABASE_URL)
     @app.get("/")
     def root():

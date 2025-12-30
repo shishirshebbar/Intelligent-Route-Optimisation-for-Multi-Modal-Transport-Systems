@@ -43,6 +43,11 @@ export default function Kpis(props: {
   lastEvent?: string
   delayProb?: number
   expectedDelayMin?: number
+  // STEP-5.4 Evaluation KPIs
+  delayReductionPct?: number
+  emissionsSavedPct?: number
+  costChangePct?: number
+  reroutesCount?: number
 }) {
   console.log("KPIS PROPS:", {
     delayProb: props.delayProb,
@@ -50,7 +55,8 @@ export default function Kpis(props: {
   })
   return (
     
-    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-4">
+   <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-9 gap-4">
+
       <KpiCard title="Shipments" value={props.shipments} />
       <KpiCard title="Locations" value={props.locations} />
       <KpiCard
@@ -78,6 +84,38 @@ export default function Kpis(props: {
             : "—"
         }
       />
+      {props.delayReductionPct !== undefined && (
+  <KpiCard
+    title="Delay Reduced"
+    value={`${props.delayReductionPct}%`}
+    sub="vs baseline"
+  />
+)}
+
+{props.emissionsSavedPct !== undefined && (
+  <KpiCard
+    title="Emissions Saved"
+    value={`${props.emissionsSavedPct}%`}
+    sub="CO₂ reduction"
+  />
+)}
+
+{props.costChangePct !== undefined && (
+  <KpiCard
+    title="Cost Change"
+    value={`${props.costChangePct}%`}
+    sub="optimised vs baseline"
+  />
+)}
+
+{props.reroutesCount !== undefined && (
+  <KpiCard
+    title="Reroutes"
+    value={props.reroutesCount}
+    sub="event-triggered"
+  />
+)}
+
     </div>
   )
 }

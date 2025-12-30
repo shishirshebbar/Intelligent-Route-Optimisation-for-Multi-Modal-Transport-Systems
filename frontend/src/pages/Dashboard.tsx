@@ -9,6 +9,10 @@ import EventsFeed from '../components/Events/EventsFeed'
 import { km, mins, kg } from '../utils/format'
 import type { PlanOut } from '../types/api'
 import DelayTrendChart from '../components/Charts/DelayTrendChart'
+import { fetchEvaluationMetrics } from '../api/metrics'
+import DelayComparisonChart from '../components/Charts/DelayComparisonChart'
+import EmissionsByModeChart from '../components/Charts/EmissionsByModeChart'
+
 
 export default function Dashboard() {
   const [locations, setLocations] = useState<LocationOut[]>([])
@@ -27,6 +31,13 @@ const [delayTrend, setDelayTrend] = useState<
 >([])
 
   const lastEventTs = useMemo(() => events[0]?.ts, [events])
+  const [evalMetrics, setEvalMetrics] = useState<{
+  delay_reduction_pct: number
+  emissions_saved_pct: number
+  cost_change_pct: number
+  reroutes_count: number
+} | null>(null)
+
 
   // initial data (locations, shipments)
   useEffect(() => {
@@ -121,6 +132,16 @@ const [delayTrend, setDelayTrend] = useState<
   useEffect(() => {
   console.log('PLAN STATE UPDATED:', plan)
 }, [plan])
+useEffect(() => {
+  ;(async () => {
+    try {
+      const data = await fetchEvaluationMetrics()
+      setEvalMetrics(data)
+    } catch (e) {
+      console.warn('Evaluation metrics not available')
+    }
+  })()
+}, [])
 
 
   return (
@@ -171,6 +192,11 @@ const [delayTrend, setDelayTrend] = useState<
   lastEvent={lastEventTs}
   delayProb={plan?.delay_prob}
   expectedDelayMin={plan?.expected_delay_min}
+    // STEP-5.4 Evaluation KPIs
+  delayReductionPct={evalMetrics?.delay_reduction_pct}
+  emissionsSavedPct={evalMetrics?.emissions_saved_pct}
+  costChangePct={evalMetrics?.cost_change_pct}
+  reroutesCount={evalMetrics?.reroutes_count}
 />
 
           </div>
@@ -433,6 +459,11 @@ const [delayTrend, setDelayTrend] = useState<
   </div>
 
   <DelayTrendChart data={delayTrend} />
+  <div className="mt-4 grid grid-cols-1 gap-4">
+  <DelayComparisonChart />
+  <EmissionsByModeChart />
+</div>
+
 </motion.div>
 
             </motion.div>
