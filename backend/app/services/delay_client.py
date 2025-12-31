@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import os
 from typing import Dict, Any
+from xmlrpc import client
+from app.services.delay_payload_adapter import adapt_to_ml_payload
 
 import httpx
 
@@ -32,6 +34,8 @@ def _dummy_predict(features: Dict[str, Any]) -> Dict[str, float]:
     }
 
 
+from datetime import datetime, timezone
+
 async def predict_delay(features: Dict[str, Any]) -> Dict[str, float]:
     """
     Predict delay for a single shipment/route.
@@ -43,21 +47,47 @@ async def predict_delay(features: Dict[str, Any]) -> Dict[str, float]:
       model_version: str
     }
     """
+
+    # ---- 🔒 Feature enrichment (prevents 422) ----
+    now = datetime.now(timezone.utc)
+
+    defaults = {
+        "weight_kg": 500.0,
+        "priority": 2,
+        "hour_of_day": now.hour,
+        "day_of_week": now.weekday(),
+        "temperature_c": 25.0,
+        "precipitation_mm": 0.0,
+        "wind_speed_mps": 2.0,
+        "congestion_index": 0.4,
+        "avg_speed_kph": 35.0,
+    }
+
+    full_features = {**defaults, **features}
+
     if not ML_DELAY_URL:
-        return _dummy_predict(features)
+        return _dummy_predict(full_features)
 
     url = f"{ML_DELAY_URL}/ml/predict_delay"
 
     try:
         async with httpx.AsyncClient(timeout=ML_DELAY_TIMEOUT) as client:
-            r = await client.post(url, json=features)
-            r.raise_for_status()
+            payload = adapt_to_ml_payload(full_features)
+            r = await client.post(url, json=payload)
+
+            if r.status_code != 200:
+                print("❌ ML STATUS:", r.status_code)
+                print("❌ ML RESPONSE:", r.text)
+                raise DelayClientError(f"ML returned {r.status_code}")
+
             data = r.json()
+
     except Exception:
         # hard fallback → never crash backend
-        return _dummy_predict(features)
+        return _dummy_predict(full_features)
 
     if "delay_prob" not in data or "expected_delay_min" not in data:
         raise DelayClientError("Malformed ML delay response")
 
     return data
+
