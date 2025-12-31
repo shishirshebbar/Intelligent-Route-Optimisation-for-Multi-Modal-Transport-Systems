@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import api from '../api/client'
-import type { LocationListResponse, ShipmentListResponse, RouteOut, EventOut } from '../types/api'
+import type { LocationListResponse, ShipmentListResponse, RouteOut, EventOut, DynamicKpis } from '../types/api'
 import type { LocationOut, RoutingRequest } from '../types/api'
 import Map from '../components/Map/Map'
 import Kpis from '../components/Kpis/kpis'
@@ -37,6 +37,7 @@ const [delayTrend, setDelayTrend] = useState<
   cost_change_pct: number
   reroutes_count: number
 } | null>(null)
+const [dynamicKpis, setDynamicKpis] = useState<DynamicKpis | null>(null)
 
 
   // initial data (locations, shipments)
@@ -103,6 +104,8 @@ const [delayTrend, setDelayTrend] = useState<
   // 1️⃣ Compute route
   const res = await api.post<RouteOut>('/routing/multimodal', payload)
   setRoute(res.data)
+  setDynamicKpis(res.data.kpis)
+
 
   // 2️⃣ Create plan → get ML delay prediction
   try {
@@ -193,9 +196,16 @@ useEffect(() => {
   delayProb={plan?.delay_prob}
   expectedDelayMin={plan?.expected_delay_min}
     // STEP-5.4 Evaluation KPIs
-  delayReductionPct={evalMetrics?.delay_reduction_pct}
-  emissionsSavedPct={evalMetrics?.emissions_saved_pct}
-  costChangePct={evalMetrics?.cost_change_pct}
+  // delayReductionPct={evalMetrics?.delay_reduction_pct}
+  // emissionsSavedPct={evalMetrics?.emissions_saved_pct}
+  // costChangePct={evalMetrics?.cost_change_pct}
+  // reroutesCount={evalMetrics?.reroutes_count}
+    // 🔥 Dynamic per-route KPIs
+  delayReductionPct={dynamicKpis?.delay_reduction_pct}
+  emissionsSavedPct={dynamicKpis?.emissions_saved_pct}
+  costChangePct={dynamicKpis?.cost_change_pct}
+
+  // 🔄 Global metric
   reroutesCount={evalMetrics?.reroutes_count}
 />
 

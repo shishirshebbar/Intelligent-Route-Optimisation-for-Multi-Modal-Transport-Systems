@@ -1,3 +1,4 @@
+# backend/app/api/v1/routes/routing.py
 from __future__ import annotations
 
 from math import radians, sin, cos, asin, sqrt
@@ -52,11 +53,20 @@ class RouteLegOut(BaseModel):
     co2e_kg: float
     polyline: Optional[str] = None  # will be filled by OSRM later
 
+class DynamicKpiOut(BaseModel):
+    delay_reduction_pct: float
+    emissions_saved_pct: float
+    cost_change_pct: float
+
+
 class RouteOut(BaseModel):
     distance_km: float
     time_min: float
     co2e_kg: float
     legs: list[RouteLegOut]
+    kpis: DynamicKpiOut
+
+
 
 
 # ---------- Helpers ----------
@@ -88,35 +98,61 @@ def haversine_km(a: Coord, b: Coord) -> float:
 # ---------- POST /routing/multimodal (stub) ----------
 @router.post("/multimodal", response_model=RouteOut)
 def compute_multimodal_route(payload: RoutingRequest, db: Session = Depends(get_db)):
-    """
-    Stub implementation:
-      - Picks the FIRST origin and FIRST destination.
-      - Computes straight-line distance with haversine.
-      - Uses FIRST mode in payload.modes (default 'road') for speed/CO2e.
-      - Returns a single leg with deterministic values.
-    Later:
-      - Replace with OSRM (services/osrm_client.py) to return real route & polyline.
-    """
     if not payload.modes:
         raise HTTPException(status_code=400, detail="At least one mode is required")
 
     origin = payload.origins[0]
     dest = payload.destinations[0]
-    mode = payload.modes[0]
 
+    # ---------- Distance ----------
     dist_km = haversine_km(origin, dest)
-    speed = _SPEED_KPH.get(mode, 50.0)
-    time_min = (dist_km / speed) * 60.0
-    co2e = _CO2E_PER_KM.get(mode, 0.0) * dist_km
 
+    # ---------- BASELINE (road-only) ----------
+    base_speed = _SPEED_KPH["road"]
+    base_time = (dist_km / base_speed) * 60.0
+    base_co2e = _CO2E_PER_KM["road"] * dist_km
+    base_cost = dist_km * 12.0  # simple ₹/km baseline
+    base_delay = base_time * 0.35  # assumed congestion delay
+
+    # ---------- OPTIMISED ----------
+    mode = payload.modes[0]
+    opt_speed = _SPEED_KPH.get(mode, 50.0)
+    opt_time = (dist_km / opt_speed) * 60.0
+    opt_co2e = _CO2E_PER_KM.get(mode, 0.0) * dist_km
+    opt_cost = dist_km * (6.0 if mode == "rail" else 12.0)
+    opt_delay = opt_time * 0.15  # reduced delay assumption
+
+    # ---------- KPIs ----------
+    delay_reduction_pct = round(
+        (base_delay - opt_delay) / max(1.0, base_delay) * 100,
+        2,
+    )
+
+    emissions_saved_pct = round(
+        (base_co2e - opt_co2e) / max(1.0, base_co2e) * 100,
+        2,
+    )
+
+    cost_change_pct = round(
+        (opt_cost - base_cost) / max(1.0, base_cost) * 100,
+        2,
+    )
+
+    kpis = DynamicKpiOut(
+        delay_reduction_pct=delay_reduction_pct,
+        emissions_saved_pct=emissions_saved_pct,
+        cost_change_pct=cost_change_pct,
+    )
+
+    # ---------- Route leg ----------
     leg = RouteLegOut(
         mode=mode,
         from_coord=origin,
         to_coord=dest,
         distance_km=round(dist_km, 3),
-        time_min=round(time_min, 1),
-        co2e_kg=round(co2e, 3),
-        polyline=None,  # to be filled by OSRM later
+        time_min=round(opt_time, 1),
+        co2e_kg=round(opt_co2e, 3),
+        polyline=None,
     )
 
     return RouteOut(
@@ -124,4 +160,5 @@ def compute_multimodal_route(payload: RoutingRequest, db: Session = Depends(get_
         time_min=leg.time_min,
         co2e_kg=leg.co2e_kg,
         legs=[leg],
+        kpis=kpis,
     )

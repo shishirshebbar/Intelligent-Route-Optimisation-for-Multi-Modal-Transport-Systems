@@ -69,12 +69,19 @@ export interface RouteLegOut {
   co2e_kg: number
   polyline?: string | null
 }
+export type DynamicKpis = {
+  delay_reduction_pct: number
+  emissions_saved_pct: number
+  cost_change_pct: number
+}
 
 export interface RouteOut {
   distance_km: number
   time_min: number
   co2e_kg: number
   legs: RouteLegOut[]
+  kpis: DynamicKpis
+
 }
 export type PlanOut = {
   id: string
