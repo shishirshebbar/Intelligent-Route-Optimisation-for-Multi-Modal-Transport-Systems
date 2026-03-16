@@ -9,11 +9,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.db.models.location import Location as LocationModel
 from app.db.models.plan import Plan as PlanModel
 from app.db.models.plan_leg import PlanLeg as PlanLegModel
+from app.db.models.shipment import Shipment as ShipmentModel
 from app.schemas.plans import PlanCreate, PlanOut, PlanSummary, PlanLeg
 from app.services.delay_client import predict_delay
-from datetime import datetime
+from app.services.traffic_client import get_area_traffic
+from app.services.weather_client import fetch_current_weather
 
 router = APIRouter(tags=["plans"], prefix="/plans")
 
@@ -27,8 +30,6 @@ def get_db() -> Generator[Session, None, None]:
 
 # ---------- Helpers ----------
 def _to_plan_out(plan: PlanModel, legs: List[PlanLegModel]) -> PlanOut:
-    # summary is optional at this stage; you can compute later
-    summary = None
     summary = None
     if plan.total_time_min is not None or plan.total_co2e_kg is not None:
         summary = PlanSummary(
@@ -73,6 +74,51 @@ def _to_plan_out(plan: PlanModel, legs: List[PlanLegModel]) -> PlanOut:
     )
 
 
+async def _get_environment_features(db: Session, shipments: List[ShipmentModel]) -> dict:
+    defaults = {
+        "temperature_c": 25.0,
+        "precipitation_mm": 0.0,
+        "wind_speed_mps": 2.0,
+        "congestion_index": 0.4,
+        "avg_speed_kph": 35.0,
+    }
+    if not shipments:
+        return defaults
+
+    anchor_location = db.get(LocationModel, shipments[0].origin_id)
+    if anchor_location is None:
+        anchor_location = db.get(LocationModel, shipments[0].destination_id)
+    if anchor_location is None:
+        return defaults
+
+    weather = {
+        "temperature_c": defaults["temperature_c"],
+        "precipitation_mm": defaults["precipitation_mm"],
+        "wind_speed_mps": defaults["wind_speed_mps"],
+    }
+    try:
+        snapshot = await fetch_current_weather(float(anchor_location.lat), float(anchor_location.lon))
+        weather = {
+            "temperature_c": snapshot.temperature_c if snapshot.temperature_c is not None else defaults["temperature_c"],
+            "precipitation_mm": snapshot.precipitation_mm if snapshot.precipitation_mm is not None else defaults["precipitation_mm"],
+            "wind_speed_mps": snapshot.wind_speed_mps if snapshot.wind_speed_mps is not None else defaults["wind_speed_mps"],
+        }
+    except Exception:
+        pass
+
+    traffic = get_area_traffic(
+        lat=float(anchor_location.lat),
+        lon=float(anchor_location.lon),
+        rain_mm=weather["precipitation_mm"],
+    )
+
+    return {
+        **weather,
+        "congestion_index": traffic.congestion_index,
+        "avg_speed_kph": traffic.avg_speed_kph,
+    }
+
+
 
 # ---------- POST /plans ----------
 @router.post("", response_model=PlanOut, status_code=201)
@@ -84,47 +130,63 @@ async def create_plan(payload: PlanCreate, db: Session = Depends(get_db)):
     if not payload.shipment_ids:
         raise HTTPException(status_code=400, detail="shipment_ids cannot be empty")
 
+    shipments = (
+        db.execute(
+            select(ShipmentModel).where(ShipmentModel.id.in_(payload.shipment_ids))
+        )
+        .scalars()
+        .all()
+    )
+    if not shipments:
+        raise HTTPException(status_code=400, detail="No valid shipments found")
+
+    found_ids = {shipment.id for shipment in shipments}
+    missing_ids = [shipment_id for shipment_id in payload.shipment_ids if shipment_id not in found_ids]
+    if missing_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown shipment_ids: {', '.join(missing_ids)}",
+        )
+
+    total_weight_kg = sum(float(shipment.weight_kg) for shipment in shipments)
+    avg_priority = max(1, min(3, round(sum(int(shipment.priority or 0) for shipment in shipments) / len(shipments)) + 1))
+
     plan_id = f"plan_{uuid.uuid4().hex[:8]}"
     plan = PlanModel(
         id=plan_id,
-        status="draft",
+        status="active",
         created_at=datetime.utcnow(),
-        details_json={"shipment_ids": payload.shipment_ids, "objective": payload.objective, "modes": payload.modes, "constraints": payload.constraints},
+        total_distance_km=float(payload.total_distance_km or 0.0),
+        total_time_min=float(payload.total_time_min or 0.0),
+        total_co2e_kg=float(payload.total_co2e_kg or 0.0),
+        details_json={
+            "shipment_ids": payload.shipment_ids,
+            "objective": payload.objective,
+            "modes": payload.modes,
+            "constraints": payload.constraints,
+            "selected_mode": payload.selected_mode,
+        },
     )
     db.add(plan)
     db.commit()
     db.refresh(plan)
-        # ---------------- Delay ML integration ----------------
+
+    # ---------------- Delay ML integration ----------------
     now = datetime.utcnow()
-
-    # TEMP / AGGREGATED values (acceptable for Sem-1)
-    total_weight_kg = 0.0      # replace with real aggregation later
-    avg_priority = 2           # simple default
-
-    # TEMP stubs (until traffic/weather services wired)
-    traffic = {
-        "congestion_index": 0.6,
-        "avg_speed_kph": 30.0,
-    }
-
-    weather = {
-        "temperature_c": 30.0,
-        "precipitation_mm": 1.0,
-        "wind_speed_mps": 4.0,
-    }
+    environment = await _get_environment_features(db, shipments)
 
     delay_features = {
-        "distance_km": plan.total_distance_km or 0.0,
-        "baseline_time_min": plan.total_time_min or 0.0,
+        "distance_km": max(plan.total_distance_km or 0.0, 1.0),
+        "baseline_time_min": max(plan.total_time_min or 0.0, 1.0),
         "weight_kg": total_weight_kg,
         "priority": avg_priority,
         "hour_of_day": now.hour,
         "day_of_week": now.weekday(),
-        "temperature_c": weather["temperature_c"],
-        "precipitation_mm": weather["precipitation_mm"],
-        "wind_speed_mps": weather["wind_speed_mps"],
-        "congestion_index": traffic["congestion_index"],
-        "avg_speed_kph": traffic["avg_speed_kph"],
+        "temperature_c": environment["temperature_c"],
+        "precipitation_mm": environment["precipitation_mm"],
+        "wind_speed_mps": environment["wind_speed_mps"],
+        "congestion_index": environment["congestion_index"],
+        "avg_speed_kph": environment["avg_speed_kph"],
     }
 
     delay = await predict_delay(delay_features)
@@ -136,7 +198,7 @@ async def create_plan(payload: PlanCreate, db: Session = Depends(get_db)):
     db.refresh(plan)
     # -----------------------------------------------------
 
-        # No legs yet
+    # No legs yet
     return _to_plan_out(plan, legs=[])
 
 # ---------- GET /plans/{id} ----------

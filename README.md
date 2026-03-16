@@ -1,6 +1,24 @@
 # Intelligent Route Optimisation for Multi-Modal Transport Systems
 
-An intelligent routing prototype that helps logistics teams plan cost-, time-, and CO₂-aware shipments across their own depots and hubs. It demonstrates road-network planning and live shipment visibility, with clear scope for delay prediction and future multi-modal expansion.
+An end-to-end logistics demo that combines:
+- FastAPI backend APIs
+- React control-tower dashboard
+- PostgreSQL/PostGIS data layer
+- OSRM road routing
+- an ML delay prediction microservice
+- weather, traffic, and reroute worker loops
+
+For the current demo:
+- `road` mode uses OSRM when available
+- `rail`, `sea`, and `air` use heuristic mode parameters
+- the dashboard uses seeded shipments and locations out of the box
+
+## Demo Architecture
+- `backend/`: APIs for network, shipments, plans, routing, events, and metrics
+- `frontend/`: dashboard for routes, KPIs, events, and delay charts
+- `ml/delay_service/`: FastAPI service serving the trained delay model
+- `infra/`: Postgres/PostGIS and OSRM setup
+- `backend/app/workers/`: weather, traffic, and reroute event loops
 
 ## 1. Clone the repo
 ```bash
@@ -8,12 +26,8 @@ git clone https://github.com/shishirshebbar/Intelligent-Route-Optimisation-for-M
 cd Intelligent-Route-Optimisation-for-Multi-Modal-Transport-Systems
 ```
 
-## 2. for .env files 
-
-
-create a .env file in the root(copy this):
-
-```bash
+## 2. Create the root `.env`
+```env
 POSTGRES_USER=logi_user
 POSTGRES_PASSWORD=logi_pass
 POSTGRES_DB=logistics
@@ -34,91 +48,119 @@ ML_DELAY_URL=http://localhost:51000
 ML_DELAY_TIMEOUT=5
 ```
 
-next inside frontend directory - create another .env file(copy this):
-
-```bash
+## 3. Create `frontend/.env`
+```env
 VITE_API_BASE=/api/v1
 ```
 
-## 3. Download osrm data from -  https://download.geofabrik.de/asia/india/southern-zone.html and place it in the data folder
-
-rename the downloaded folder as region.osm.pbf
-
-next - in terminal 
-
-```bash
-cd infra/osrm
-docker run --rm -v "$PWD:/data" osrm/osrm-backend:v5.27.0 \
-  osrm-extract -p /data/profiles/car.lua /data/data/region.osm.pbf
-docker run --rm -v "$PWD:/data" osrm/osrm-backend:v5.27.0 \
-  osrm-partition /data/data/region.osrm
-docker run --rm -v "$PWD:/data" osrm/osrm-backend:v5.27.0 \
-  osrm-customize /data/data/region.osrm
-cd ../..
-
-
+## 4. Prepare OSRM data
+Download a `.osm.pbf` file from Geofabrik and place it in `data/` as:
+```text
+data/region.osm.pbf
 ```
 
-## 4. Infrastructure setup(from root dir)
+Then preprocess it:
+```bash
+cd infra/osrm
+docker run --rm -v "$PWD:/data" osrm/osrm-backend:v5.27.0 osrm-extract -p /data/profiles/car.lua /data/data/region.osm.pbf
+docker run --rm -v "$PWD:/data" osrm/osrm-backend:v5.27.0 osrm-partition /data/data/region.osrm
+docker run --rm -v "$PWD:/data" osrm/osrm-backend:v5.27.0 osrm-customize /data/data/region.osrm
+cd ../..
+```
+
+## 5. Start infrastructure
 ```bash
 docker compose up -d db osrm
 ```
 
-## 5. Check the logs(from root dir)
-```bash
-docker logs -f logistics_db
-```
+The seeded schema includes demo locations and shipments such as `S1`, `S2`, and `S3`.
 
-## 6. Connect to PostgreSQL(from root dir)
+## 6. Start the ML delay service
 ```bash
-docker exec -it logistics_db psql -U logi_user -d logistics
-```
-to quit
-```bash
-\q
-```
-## 7. Run ml delay service
-
-```bash
-cd ml\delay_service
-```
-```bash
+cd ml/delay_service
 uvicorn app:app --port 51000
 ```
 
-
-## 8. For the frontend
-```bash
-cd frontend
-```
-```bash
-npm i
-```
-```bash
-npm run dev
-```
-
-## 9. Run the backend
+## 7. Start the backend
 ```bash
 cd backend
-```
-```bash
 pip install -r requirements.txt
-```
-```bash
 python -m uvicorn app.main:app --reload
 ```
 
+## 8. Start the frontend
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-## 10. Verify if everything is working
+## 9. Start live event workers
+Open separate terminals inside `backend/` and run:
 
-Frontend: http://localhost:5173
+Weather worker:
+```bash
+python -m app.workers.ingest_weather --once
+```
+or continuous mode:
+```bash
+python -m app.workers.ingest_weather
+```
 
-Backend Docs: http://localhost:8000/docs  -  this opens swagger ui
+Traffic worker:
+```bash
+python -m app.workers.ingest_traffic --once
+```
+or continuous mode:
+```bash
+python -m app.workers.ingest_traffic
+```
 
-ML (Delay Prediction Service) : http://localhost:51000/docs - this opens swagger ui
+Reroute engine:
+```bash
+python -m app.workers.reroute_engine
+```
 
-OSRM quick check(from root terminal):
+## 10. Verify services
+- Frontend: `http://localhost:5173`
+- Backend docs: `http://localhost:8000/api/v1/docs`
+- ML docs: `http://localhost:51000/docs`
+
+Quick OSRM check:
 ```bash
 curl "http://localhost:5000/route/v1/driving/76.27,10.00;76.50,10.10?overview=false"
 ```
+
+## 11. Full demo flow
+1. Open the dashboard.
+2. Select a seeded shipment.
+3. Keep mode as `road` to use OSRM-backed routing.
+4. Click `Compute Route`.
+5. The app will:
+   - fetch a route
+   - create an active plan
+   - call the ML delay service
+   - display distance, ETA, CO2e, and expected delay
+6. Run the weather and traffic workers to populate the live events panel.
+7. Keep the reroute worker running to emit reroute events when severe traffic or weather events appear.
+
+## 12. What is real vs heuristic
+Real in the current demo:
+- road routing via OSRM
+- shipment-backed plan creation
+- ML delay prediction service
+- weather ingestion from Open-Meteo
+- traffic event generation
+- event feed and reroute event persistence
+
+Heuristic in the current demo:
+- rail/sea/air routing
+- optimisation scoring weights
+- evaluation metrics used for research comparison
+
+## 13. Current best demo mode
+For the smoothest live demo, use:
+- `road` mode
+- seeded shipments
+- one-shot weather and traffic worker runs before presenting
+- reroute worker running in the background

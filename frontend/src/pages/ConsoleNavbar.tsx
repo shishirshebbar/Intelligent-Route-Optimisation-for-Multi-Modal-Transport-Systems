@@ -1,4 +1,3 @@
-import React from 'react'
 import { Scan, Wifi, Search, Sparkles } from 'lucide-react'
 
 export default function ConsoleNavbar({ onHome }: { onHome: () => void }) {

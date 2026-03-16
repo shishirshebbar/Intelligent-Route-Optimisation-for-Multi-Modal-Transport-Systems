@@ -12,6 +12,10 @@ class PlanCreate(BaseModel):
     objective: Optional[str] = None
     modes: Optional[list[str]] = None
     constraints: Optional[dict] = None
+    selected_mode: Optional[LegMode] = None
+    total_distance_km: Optional[float] = None
+    total_time_min: Optional[float] = None
+    total_co2e_kg: Optional[float] = None
 
 
 class PlanSummary(BaseModel):
@@ -36,6 +40,8 @@ class PlanLeg(BaseModel):
 
 class PlanOut(BaseModel):
     id: str
+    status: PlanStatus
+    created_at: datetime
     total_distance_km: float
     total_time_min: float
     total_co2e_kg: float
@@ -43,3 +49,5 @@ class PlanOut(BaseModel):
     # ML outputs
     delay_prob: Optional[float]
     expected_delay_min: Optional[float]
+    summary: Optional[PlanSummary] = None
+    legs: list[PlanLeg] = Field(default_factory=list)

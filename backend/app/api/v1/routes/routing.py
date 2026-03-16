@@ -1,18 +1,19 @@
-# backend/app/api/v1/routes/routing.py
 from __future__ import annotations
 
 from math import radians, sin, cos, asin, sqrt
-from typing import Generator, Literal, Optional, Annotated
+from typing import Annotated, Generator, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, conlist
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
+from app.services.mode_params import MODE_PARAMS
+from app.services.osrm_client import OSRMCoor, route as osrm_route
 
 router = APIRouter(tags=["routing"], prefix="/routing")
 
-# ---------- DB session dependency (kept for parity; not used yet) ----------
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
@@ -21,21 +22,24 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-# ---------- Schemas (local to routing for simplicity) ----------
 Mode = Literal["road", "rail", "sea", "air", "transfer"]
+
 
 class Coord(BaseModel):
     lat: float = Field(..., ge=-90, le=90)
     lon: float = Field(..., ge=-180, le=180)
+
 
 class Objective(BaseModel):
     cost: float = 0.5
     time: float = 0.3
     co2e: float = 0.2
 
+
 class Constraints(BaseModel):
     prefer_low_emission_within_pct: Optional[int] = 10
-    depart_after: Optional[str] = None  # ISO string
+    depart_after: Optional[str] = None
+
 
 class RoutingRequest(BaseModel):
     origins: Annotated[list[Coord], Field(min_length=1)]
@@ -44,6 +48,7 @@ class RoutingRequest(BaseModel):
     objective: Objective = Objective()
     constraints: Optional[Constraints] = None
 
+
 class RouteLegOut(BaseModel):
     mode: Mode
     from_coord: Coord
@@ -51,7 +56,9 @@ class RouteLegOut(BaseModel):
     distance_km: float
     time_min: float
     co2e_kg: float
-    polyline: Optional[str] = None  # will be filled by OSRM later
+    polyline: Optional[str] = None
+    source: str = "heuristic"
+
 
 class DynamicKpiOut(BaseModel):
     delay_reduction_pct: float
@@ -65,94 +72,97 @@ class RouteOut(BaseModel):
     co2e_kg: float
     legs: list[RouteLegOut]
     kpis: DynamicKpiOut
+    source: str = "heuristic"
 
 
-
-
-# ---------- Helpers ----------
-_SPEED_KPH = {
-    "road": 50.0,
-    "rail": 80.0,
-    "sea": 30.0,
-    "air": 700.0,
-    "transfer": 3.0,
-}
-
-_CO2E_PER_KM = {  # placeholder kg CO2e per vehicle-km (not per kg of cargo)
-    "road": 0.85,
-    "rail": 0.25,
-    "sea": 0.15,
-    "air": 2.5,
+_CO2E_PER_KM = {
+    "road": MODE_PARAMS["road"]["emission_kg_per_km"],
+    "rail": MODE_PARAMS["rail"]["emission_kg_per_km"],
+    "sea": MODE_PARAMS["sea"]["emission_kg_per_km"],
+    "air": MODE_PARAMS["air"]["emission_kg_per_km"],
     "transfer": 0.0,
 }
 
+
 def haversine_km(a: Coord, b: Coord) -> float:
-    R = 6371.0
+    earth_radius_km = 6371.0
     lat1, lon1, lat2, lon2 = map(radians, [a.lat, a.lon, b.lat, b.lon])
     dlat = lat2 - lat1
     dlon = lon2 - lon1
     h = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-    return 2 * R * asin(sqrt(h))
+    return 2 * earth_radius_km * asin(sqrt(h))
 
 
-# ---------- POST /routing/multimodal (stub) ----------
+async def _compute_road_metrics(origin: Coord, dest: Coord) -> tuple[float, float, Optional[str], str]:
+    try:
+        data = await osrm_route(
+            [OSRMCoor(lat=origin.lat, lon=origin.lon), OSRMCoor(lat=dest.lat, lon=dest.lon)]
+        )
+        routes = data.get("routes") or []
+        if routes:
+            best = routes[0]
+            distance_km = float(best.get("distance", 0.0)) / 1000.0
+            time_min = float(best.get("duration", 0.0)) / 60.0
+            polyline = best.get("geometry")
+            if distance_km > 0 and time_min > 0:
+                return distance_km, time_min, polyline, "osrm"
+    except Exception:
+        pass
+
+    distance_km = haversine_km(origin, dest)
+    time_min = (distance_km / MODE_PARAMS["road"]["speed_kph"]) * 60.0
+    return distance_km, time_min, None, "heuristic"
+
+
+async def _compute_mode_leg(mode: Mode, origin: Coord, dest: Coord) -> RouteLegOut:
+    if mode == "road":
+        distance_km, time_min, polyline, source = await _compute_road_metrics(origin, dest)
+    else:
+        params = MODE_PARAMS.get(mode)
+        if params is None:
+            raise HTTPException(status_code=400, detail=f"Unsupported mode: {mode}")
+        distance_km = haversine_km(origin, dest)
+        time_min = (distance_km / params["speed_kph"]) * 60.0 + params["transfer_penalty_min"]
+        polyline = None
+        source = "heuristic"
+
+    return RouteLegOut(
+        mode=mode,
+        from_coord=origin,
+        to_coord=dest,
+        distance_km=round(distance_km, 3),
+        time_min=round(time_min, 1),
+        co2e_kg=round(distance_km * _CO2E_PER_KM.get(mode, 0.0), 3),
+        polyline=polyline,
+        source=source,
+    )
+
+
 @router.post("/multimodal", response_model=RouteOut)
-def compute_multimodal_route(payload: RoutingRequest, db: Session = Depends(get_db)):
+async def compute_multimodal_route(payload: RoutingRequest, db: Session = Depends(get_db)):
     if not payload.modes:
         raise HTTPException(status_code=400, detail="At least one mode is required")
 
     origin = payload.origins[0]
     dest = payload.destinations[0]
-
-    # ---------- Distance ----------
-    dist_km = haversine_km(origin, dest)
-
-    # ---------- BASELINE (road-only) ----------
-    base_speed = _SPEED_KPH["road"]
-    base_time = (dist_km / base_speed) * 60.0
-    base_co2e = _CO2E_PER_KM["road"] * dist_km
-    base_cost = dist_km * 12.0  # simple ₹/km baseline
-    base_delay = base_time * 0.35  # assumed congestion delay
-
-    # ---------- OPTIMISED ----------
     mode = payload.modes[0]
-    opt_speed = _SPEED_KPH.get(mode, 50.0)
-    opt_time = (dist_km / opt_speed) * 60.0
-    opt_co2e = _CO2E_PER_KM.get(mode, 0.0) * dist_km
-    opt_cost = dist_km * (6.0 if mode == "rail" else 12.0)
-    opt_delay = opt_time * 0.15  # reduced delay assumption
 
-    # ---------- KPIs ----------
-    delay_reduction_pct = round(
-        (base_delay - opt_delay) / max(1.0, base_delay) * 100,
-        2,
-    )
+    leg = await _compute_mode_leg(mode, origin, dest)
+    baseline_leg = await _compute_mode_leg("road", origin, dest)
 
-    emissions_saved_pct = round(
-        (base_co2e - opt_co2e) / max(1.0, base_co2e) * 100,
-        2,
-    )
-
-    cost_change_pct = round(
-        (opt_cost - base_cost) / max(1.0, base_cost) * 100,
-        2,
-    )
+    base_cost = baseline_leg.distance_km * MODE_PARAMS["road"]["cost_per_km"]
+    mode_params = MODE_PARAMS.get(mode, MODE_PARAMS["road"])
+    opt_cost = leg.distance_km * mode_params["cost_per_km"]
+    base_delay = baseline_leg.time_min * 0.35
+    opt_delay = leg.time_min * (0.15 if mode == "road" else 0.12)
 
     kpis = DynamicKpiOut(
-        delay_reduction_pct=delay_reduction_pct,
-        emissions_saved_pct=emissions_saved_pct,
-        cost_change_pct=cost_change_pct,
-    )
-
-    # ---------- Route leg ----------
-    leg = RouteLegOut(
-        mode=mode,
-        from_coord=origin,
-        to_coord=dest,
-        distance_km=round(dist_km, 3),
-        time_min=round(opt_time, 1),
-        co2e_kg=round(opt_co2e, 3),
-        polyline=None,
+        delay_reduction_pct=round((base_delay - opt_delay) / max(1.0, base_delay) * 100, 2),
+        emissions_saved_pct=round(
+            (baseline_leg.co2e_kg - leg.co2e_kg) / max(1.0, baseline_leg.co2e_kg) * 100,
+            2,
+        ),
+        cost_change_pct=round((opt_cost - base_cost) / max(1.0, base_cost) * 100, 2),
     )
 
     return RouteOut(
@@ -161,4 +171,5 @@ def compute_multimodal_route(payload: RoutingRequest, db: Session = Depends(get_
         co2e_kg=leg.co2e_kg,
         legs=[leg],
         kpis=kpis,
+        source=leg.source,
     )

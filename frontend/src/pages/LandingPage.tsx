@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence, type Variants } from "framer-motion";
 import {
   Map as MapIcon,
@@ -8,19 +8,13 @@ import {
   Rocket,
   Leaf,
   Gauge,
-  Network,
   Truck,
   CloudLightning,
-  ShieldCheck,
-  Database,
   Radar,
   ArrowRight,
   Sparkles,
   Scan,
   BarChart3,
-  Github,
-  Linkedin,
-  Mail,
   AlertTriangle
 } from "lucide-react";
 

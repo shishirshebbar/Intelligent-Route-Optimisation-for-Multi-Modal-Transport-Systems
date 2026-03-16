@@ -35,7 +35,7 @@ export interface ShipmentListResponse {
 // ---- Events
 
 
-export type EventType = 'traffic' | 'weather' | 'fuel_price' | 'breakdown'
+export type EventType = 'traffic' | 'weather' | 'fuel_price' | 'breakdown' | 'reroute'
 export type Severity = 'low' | 'moderate' | 'high'
 
 export interface EventOut {
@@ -68,6 +68,7 @@ export interface RouteLegOut {
   time_min: number
   co2e_kg: number
   polyline?: string | null
+  source?: string
 }
 export type DynamicKpis = {
   delay_reduction_pct: number
@@ -81,14 +82,16 @@ export interface RouteOut {
   co2e_kg: number
   legs: RouteLegOut[]
   kpis: DynamicKpis
-
+  source?: string
 }
 export type PlanOut = {
   id: string
+  status: 'draft' | 'active' | 'rerouted' | 'completed' | 'failed'
+  created_at: string
   total_distance_km: number
   total_time_min: number
   total_co2e_kg: number
-  delay_prob: number
-  expected_delay_min: number
+  delay_prob: number | null
+  expected_delay_min: number | null
 }
 

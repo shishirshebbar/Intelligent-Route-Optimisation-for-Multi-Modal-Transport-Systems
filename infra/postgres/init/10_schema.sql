@@ -66,9 +66,14 @@ CREATE TABLE IF NOT EXISTS plans (
   id              TEXT PRIMARY KEY,
   status          TEXT CHECK (status IN ('draft','active','rerouted','completed','failed')) DEFAULT 'draft',
   created_at      TIMESTAMPTZ DEFAULT now(),
+  total_distance_km DOUBLE PRECISION DEFAULT 0,
   total_cost      DOUBLE PRECISION,
   total_time_min  INT,
   total_co2e_kg   DOUBLE PRECISION,
+  delay_prob      DOUBLE PRECISION,
+  expected_delay_min DOUBLE PRECISION,
+  was_rerouted    BOOLEAN DEFAULT FALSE,
+  reroute_reason  TEXT,
   details_json    JSONB
 );
 
@@ -94,6 +99,8 @@ CREATE TABLE IF NOT EXISTS events (
   id           BIGSERIAL PRIMARY KEY,
   plan_id      TEXT REFERENCES plans(id),
   type         TEXT NOT NULL,
+  source       TEXT,
+  severity     TEXT,
   ts           TIMESTAMPTZ NOT NULL DEFAULT now(),
   payload_json JSONB
 );

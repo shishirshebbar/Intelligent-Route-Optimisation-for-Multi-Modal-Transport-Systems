@@ -5,6 +5,8 @@ def score_route(metrics, weights):
         + weights["emissions"] * metrics["emissions_kg"]
         + weights["cost"] * metrics["cost"]
     )
+
+
 def choose_best_mode(mode_metrics, weights):
     scored = []
 
@@ -14,6 +16,8 @@ def choose_best_mode(mode_metrics, weights):
 
     scored.sort(key=lambda x: x[1])
     return scored[0]  # (mode, score, metrics)
+
+
 from app.services.mode_params import MODE_PARAMS
 
 MULTIMODAL_CHAINS = [
@@ -45,6 +49,8 @@ def evaluate_chain(chain, distance_km, delay, weights):
 
     score = score_route(total, weights)
     return score, total
+
+
 def select_best_transport_plan(
     distance_km,
     delay,
@@ -69,6 +75,8 @@ def select_best_transport_plan(
         "is_multimodal": best[0] == "chain",
         "metrics": best[3],
     }
+
+
 from app.db.models.event import Event
 from app.services.mode_metrics import compute_mode_metrics
 
@@ -109,24 +117,35 @@ async def optimise_plan(plan, db):
         mode_metrics=mode_metrics,
     )
 
-    # Update plan
-    plan.selected_mode = result["selected_mode"]
-    plan.is_multimodal = result["is_multimodal"]
+    # Persist the reroute decision inside the existing JSON payload.
+    details = dict(plan.details_json or {})
+    details["selected_mode"] = result["selected_mode"]
+    details["is_multimodal"] = result["is_multimodal"]
+    details["optimised_metrics"] = result["metrics"]
+    plan.details_json = details
+    plan.status = "rerouted"
     plan.was_rerouted = True
     plan.reroute_reason = "EVENT_TRIGGERED"
 
+    # Emit reroute event for frontend
+    db.add(
+        Event(
+            plan_id=plan.id,
+            type="reroute",
+            source="reroute-engine",
+            severity="moderate",
+            payload_json={
+                "plan_id": plan.id,
+                "reason": plan.reroute_reason,
+                "new_mode": result["selected_mode"],
+                "is_multimodal": result["is_multimodal"],
+                "metrics": result["metrics"],
+            },
+        )
+    )
     db.commit()
 
-    # Emit reroute event for frontend
-    db.add(Event(
-        type="reroute",
-        payload_json={
-            "plan_id": plan.id,
-            "reason": plan.reroute_reason,
-            "new_mode": plan.selected_mode,
-        }
-    ))
-    db.commit()
+
 def compute_improvements(baseline, optimised):
     return {
         "delay_reduction_pct": round(

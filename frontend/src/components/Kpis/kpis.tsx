@@ -49,10 +49,6 @@ export default function Kpis(props: {
   costChangePct?: number
   reroutesCount?: number
 }) {
-  console.log("KPIS PROPS:", {
-    delayProb: props.delayProb,
-    expectedDelayMin: props.expectedDelayMin,
-  })
   return (
     
    <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-9 gap-4">

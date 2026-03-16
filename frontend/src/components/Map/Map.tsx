@@ -22,10 +22,13 @@ export default function Map({ locations, route }: Props) {
     return [[south, west] as [number, number], [north, east] as [number, number]]
   }, [locations])
 
-  // Build polyline from stubbed route (we only get two coords in stub)
   const line: [number, number][] | null = useMemo(() => {
     if (!route || !route?.legs?.length) return null
     const leg = route.legs[0]
+    if (leg.polyline) {
+      const decoded = decodePolyline(leg.polyline)
+      if (decoded.length > 1) return decoded
+    }
     return [
       [leg.from_coord.lat, leg.from_coord.lon],
       [leg.to_coord.lat, leg.to_coord.lon],
@@ -67,4 +70,42 @@ export default function Map({ locations, route }: Props) {
       )}
     </MapContainer>
   )
+}
+
+function decodePolyline(encoded: string): [number, number][] {
+  const coordinates: [number, number][] = []
+  let index = 0
+  let lat = 0
+  let lon = 0
+
+  while (index < encoded.length) {
+    let result = 0
+    let shift = 0
+    let byte: number
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63
+      result |= (byte & 0x1f) << shift
+      shift += 5
+    } while (byte >= 0x20)
+
+    const deltaLat = (result & 1) !== 0 ? ~(result >> 1) : result >> 1
+    lat += deltaLat
+
+    result = 0
+    shift = 0
+
+    do {
+      byte = encoded.charCodeAt(index++) - 63
+      result |= (byte & 0x1f) << shift
+      shift += 5
+    } while (byte >= 0x20)
+
+    const deltaLon = (result & 1) !== 0 ? ~(result >> 1) : result >> 1
+    lon += deltaLon
+
+    coordinates.push([lat / 1e5, lon / 1e5])
+  }
+
+  return coordinates
 }

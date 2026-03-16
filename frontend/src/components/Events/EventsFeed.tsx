@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../../api/client'
 import type { EventOut, EventType, Severity } from '../../types/api'
 

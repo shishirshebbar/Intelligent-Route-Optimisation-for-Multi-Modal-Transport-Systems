@@ -38,7 +38,7 @@ async def process_event(event: Event, db: Session):
     # Fetch active plans
     active_plans = (
         db.query(Plan)
-        .filter(Plan.status == "ACTIVE")
+        .filter(Plan.status == "active")
         .all()
     )
 
@@ -51,17 +51,19 @@ async def reroute_loop(poll_seconds: int = 30):
     Periodically scan for new events and trigger re-routing.
     """
     db = SessionLocal()
+    last_seen_event_id = 0
     try:
         while True:
             events = (
                 db.query(Event)
-                .order_by(Event.ts.desc())
-                .limit(10)
+                .filter(Event.id > last_seen_event_id)
+                .order_by(Event.id.asc())
                 .all()
             )
 
             for event in events:
                 await process_event(event, db)
+                last_seen_event_id = max(last_seen_event_id, int(event.id))
 
             await asyncio.sleep(poll_seconds)
     finally:
