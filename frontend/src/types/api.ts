@@ -55,6 +55,8 @@ export interface Coord { lat: number; lon: number }
 export interface RoutingRequest {
   origins: Coord[]
   destinations: Coord[]
+  origin_id?: number
+  destination_id?: number
   modes: Mode[]
   objective?: { cost: number; time: number; co2e: number }
   constraints?: { prefer_low_emission_within_pct?: number; depart_after?: string | null }

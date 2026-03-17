@@ -22,17 +22,18 @@ export default function Map({ locations, route }: Props) {
     return [[south, west] as [number, number], [north, east] as [number, number]]
   }, [locations])
 
-  const line: [number, number][] | null = useMemo(() => {
-    if (!route || !route?.legs?.length) return null
-    const leg = route.legs[0]
-    if (leg.polyline) {
-      const decoded = decodePolyline(leg.polyline)
-      if (decoded.length > 1) return decoded
-    }
-    return [
-      [leg.from_coord.lat, leg.from_coord.lon],
-      [leg.to_coord.lat, leg.to_coord.lon],
-    ]
+  const lines: [number, number][][] = useMemo(() => {
+    if (!route || !route?.legs?.length) return []
+    return route.legs.map(leg => {
+      if (leg.polyline) {
+        const decoded = decodePolyline(leg.polyline)
+        if (decoded.length > 1) return decoded
+      }
+      return [
+        [leg.from_coord.lat, leg.from_coord.lon],
+        [leg.to_coord.lat, leg.to_coord.lon],
+      ]
+    })
   }, [route])
 
   return (
@@ -65,9 +66,9 @@ export default function Map({ locations, route }: Props) {
         </CircleMarker>
       ))}
 
-      {line && (
-        <Polyline positions={line} pathOptions={{ weight: 5 }} />
-      )}
+      {lines?.map((line, index) => (
+        <Polyline key={index} positions={line} pathOptions={{ weight: 5 }} />
+      ))}
     </MapContainer>
   )
 }

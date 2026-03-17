@@ -1,5 +1,7 @@
-| Scenario | Delay ↓ | Emissions ↓ | Cost Δ | Selected Mode |
-|--------|--------|------------|-------|---------------|
-| Normal | 12.7% | 18.4% | −3.0% | Road |
-| Traffic | 45.0% | 51.8% | −8.2% | Rail |
-| Weather | 60.0% | 40.0% | +1.9% | Road → Rail → Road |
+| Scenario | Distance (km) | Delay Reduction | Emissions Saved | Cost Change | Selected Mode |
+|---|---:|---:|---:|---:|---|
+| Normal | 30 | 0.0% | 0.0% | 0.0% | Road |
+| Traffic | 320 | 22.2% | 66.7% | -50.0% | Rail |
+| Weather | 320 | 22.0% | 66.7% | -50.0% | Rail |
+| Peak Hour | 180 | 52.3% | -400.0% | 275.0% | Air |
+| Green Corridor | 600 | -43.8% | 83.3% | -66.7% | Sea |

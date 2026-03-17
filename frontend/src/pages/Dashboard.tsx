@@ -17,7 +17,7 @@ import Kpis from '../components/Kpis/kpis'
 import EventsFeed from '../components/Events/EventsFeed'
 import { km, mins, kg } from '../utils/format'
 import DelayTrendChart from '../components/Charts/DelayTrendChart'
-import { fetchEvaluationMetrics } from '../api/metrics'
+import { fetchEvaluationMetrics, type EvaluationMetrics } from '../api/metrics'
 import DelayComparisonChart from '../components/Charts/DelayComparisonChart'
 import EmissionsByModeChart from '../components/Charts/EmissionsByModeChart'
 
@@ -36,12 +36,7 @@ export default function Dashboard() {
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
   const [plan, setPlan] = useState<PlanOut | null>(null)
   const [delayTrend, setDelayTrend] = useState<{ time: string; expected_delay_min: number }[]>([])
-  const [evalMetrics, setEvalMetrics] = useState<{
-    delay_reduction_pct: number
-    emissions_saved_pct: number
-    cost_change_pct: number
-    reroutes_count: number
-  } | null>(null)
+  const [evalMetrics, setEvalMetrics] = useState<EvaluationMetrics | null>(null)
   const [dynamicKpis, setDynamicKpis] = useState<DynamicKpis | null>(null)
 
   const lastEventTs = useMemo(() => events[0]?.ts, [events])
@@ -125,6 +120,8 @@ export default function Dashboard() {
     const payload: RoutingRequest = {
       origins: [{ lat: origin.lat, lon: origin.lon }],
       destinations: [{ lat: destination.lat, lon: destination.lon }],
+      origin_id: origin.id,
+      destination_id: destination.id,
       modes: [mode],
       objective: { cost: 0.5, time: 0.3, co2e: 0.2 },
     }
@@ -147,12 +144,11 @@ export default function Dashboard() {
 
       setPlan(planRes.data)
       if (planRes.data.expected_delay_min !== null) {
-        const expectedDelayMin = planRes.data.expected_delay_min
         setDelayTrend(prev => [
           ...prev,
           {
             time: new Date().toLocaleTimeString(),
-            expected_delay_min: expectedDelayMin,
+            expected_delay_min: planRes.data.expected_delay_min as number,
           },
         ])
       }
@@ -435,15 +431,13 @@ export default function Dashboard() {
                         <span className="font-medium">{kg(route.co2e_kg)}</span>
                       </div>
                     </div>
-                    {plan && (
-                      plan.expected_delay_min !== null && (
+                    {plan?.expected_delay_min !== null && plan?.expected_delay_min !== undefined && (
                       <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
                         <div className="flex flex-col">
                           <span className="text-xs text-white/60">Expected Delay</span>
                           <span className="font-medium">{mins(plan.expected_delay_min)}</span>
                         </div>
                       </div>
-                      )
                     )}
                   </div>
                 </motion.div>
@@ -486,8 +480,14 @@ export default function Dashboard() {
 
                 <DelayTrendChart data={delayTrend} />
                 <div className="mt-4 grid grid-cols-1 gap-4">
-                  <DelayComparisonChart />
-                  <EmissionsByModeChart />
+                  <DelayComparisonChart
+                    baselineDelayMin={evalMetrics?.delay_baseline_min}
+                    optimisedDelayMin={evalMetrics?.delay_optimised_min}
+                  />
+                  <EmissionsByModeChart
+                    baselineRoadEmissions={evalMetrics?.emissions_by_mode.baseline_road}
+                    optimisedModeEmissions={evalMetrics?.emissions_by_mode.optimised_mode}
+                  />
                 </div>
               </motion.div>
             </motion.div>

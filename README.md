@@ -98,6 +98,11 @@ npm run dev
 ## 9. Start live event workers
 Open separate terminals inside `backend/` and run:
 
+Optional but recommended before every demo, to reset the dashboard to a clean dataset:
+```bash
+python -m app.dev.reset_demo_data
+```
+
 Weather worker:
 ```bash
 python -m app.workers.ingest_weather --once

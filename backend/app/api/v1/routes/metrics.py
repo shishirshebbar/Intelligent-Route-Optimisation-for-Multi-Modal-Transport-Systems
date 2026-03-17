@@ -34,4 +34,11 @@ def get_evaluation_metrics(db: Session = Depends(get_db)):
         "emissions_saved_pct": results["traffic"]["improvements"]["emissions_saved_pct"],
         "cost_change_pct": results["traffic"]["improvements"]["cost_change_pct"],
         "reroutes_count": max(int(reroutes_from_events), int(reroutes_from_plans)),
+        "delay_baseline_min": results["traffic"]["baseline"]["delay_min"],
+        "delay_optimised_min": results["traffic"]["optimised"]["delay_min"],
+        "emissions_by_mode": {
+            "baseline_road": results["traffic"]["baseline"]["emissions_kg"],
+            "optimised_mode": results["traffic"]["optimised"]["emissions_kg"],
+        },
+        "scenario_results": results,
     }
