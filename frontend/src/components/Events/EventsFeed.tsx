@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AlertTriangle, RefreshCcw } from 'lucide-react'
 import api from '../../api/client'
 import type { EventOut, EventType, Severity } from '../../types/api'
 
@@ -9,6 +10,7 @@ type Props = {
   filterSeverity?: Severity
   limit?: number
   pollMs?: number
+  onLoaded?: (events: EventOut[]) => void
 }
 
 export default function EventsFeed({
@@ -18,6 +20,7 @@ export default function EventsFeed({
   filterSeverity,
   limit = 30,
   pollMs = 60_000,
+  onLoaded,
 }: Props) {
   const [events, setEvents] = useState<EventOut[]>([])
   const [loading, setLoading] = useState(false)
@@ -34,6 +37,7 @@ export default function EventsFeed({
       setErr(null)
       const res = await api.get<EventOut[]>('/events', { params })
       setEvents(res.data)
+      onLoaded?.(res.data)
     } catch (e: any) {
       setErr(e?.message || 'Failed to load events')
     } finally {
@@ -56,63 +60,67 @@ export default function EventsFeed({
         window.clearInterval(t)
       }
     }
-  }, [pollMs, JSON.stringify(params)])
+  }, [pollMs, JSON.stringify(params), onLoaded])
 
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
-        <div className="text-xs font-medium uppercase tracking-wide text-slate-300/80">
-          {title}
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">{title}</div>
+          <div className="mt-1 text-sm text-[var(--text-secondary)]">Polling interval: 60 seconds</div>
         </div>
         <button
           onClick={load}
-          className="inline-flex items-center gap-1 rounded-lg border border-white/10 bg-slate-900/70 px-3 py-1.5 text-[11px] text-slate-100 shadow-sm shadow-black/40 backdrop-blur transition hover:bg-slate-800/80 disabled:cursor-not-allowed disabled:opacity-60"
+          className="inline-flex h-9 items-center gap-2 rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 text-xs text-[var(--text-secondary)] transition hover:border-[var(--line-strong)] hover:text-[var(--text-primary)] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={loading}
         >
-          {loading && (
-            <span className="h-3 w-3 animate-spin rounded-full border border-slate-300/60 border-t-transparent" />
+          {loading ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border border-current border-r-transparent" />
+          ) : (
+            <RefreshCcw className="h-3.5 w-3.5" />
           )}
-          <span>{loading ? 'Refreshing…' : 'Refresh'}</span>
+          <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
         </button>
       </div>
 
-      {/* Error */}
       {err && (
-        <div className="mb-2 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-100">
+        <div className="mb-3 flex items-center gap-2 rounded-md border border-[var(--danger)]/50 bg-[var(--danger-muted)] px-3 py-2 text-sm text-[var(--danger)]">
+          <AlertTriangle className="h-4 w-4" />
           {err}
         </div>
       )}
 
-      {/* Empty */}
       {!err && !loading && events.length === 0 && (
-        <div className="rounded-xl border border-white/5 bg-slate-900/60 px-3 py-3 text-sm text-slate-400">
+        <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 py-3 text-sm text-[var(--text-dim)]">
           No recent events.
         </div>
       )}
 
-      {/* List */}
-      <ul className="mt-1 space-y-2">
+      <ul className="space-y-3">
         {events.map(ev => (
           <li
             key={ev.id}
-            className="rounded-xl border border-white/10 bg-slate-900/80 px-3 py-3 text-sm text-slate-100 shadow-sm shadow-black/40"
+            className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-3"
           >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
-                <div className="text-[11px] uppercase tracking-wide text-slate-400">
-                  {ev.type}
-                  {ev.source ? ` · ${ev.source}` : ''}
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                    {ev.type}
+                  </span>
+                  {ev.source && (
+                    <span className="rounded-full border border-[var(--line-soft)] px-2 py-0.5 text-[10px] text-[var(--text-dim)]">
+                      {ev.source}
+                    </span>
+                  )}
                 </div>
-                <div className="mt-1 text-xs text-slate-200 break-all">
+                <div className="mt-2 break-words text-sm leading-6 text-[var(--text-secondary)]">
                   {previewPayload(ev.payload)}
                 </div>
               </div>
-              <div className="flex flex-col items-end gap-1 text-right">
-                {ev.severity && (
-                  <span className={badgeClass(ev.severity)}>{ev.severity}</span>
-                )}
-                <div className="text-[11px] text-slate-400">
+              <div className="flex shrink-0 flex-col items-end gap-2 text-right">
+                {ev.severity && <span className={badgeClass(ev.severity)}>{ev.severity}</span>}
+                <div className="text-[11px] text-[var(--text-dim)]">
                   {new Date(ev.ts).toLocaleString()}
                 </div>
               </div>
@@ -125,15 +133,14 @@ export default function EventsFeed({
 }
 
 function badgeClass(sev: Severity) {
-  const base =
-    'inline-block text-[10px] px-2 py-0.5 rounded-full border font-medium'
+  const base = 'inline-block rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-[0.08em]'
   if (sev === 'high') {
-    return `${base} bg-red-500/15 text-red-200 border-red-400/60`
+    return `${base} border-[var(--danger)]/50 bg-[var(--danger-muted)] text-[var(--danger)]`
   }
   if (sev === 'moderate') {
-    return `${base} bg-amber-500/15 text-amber-100 border-amber-300/70`
+    return `${base} border-[var(--warning)]/50 bg-[var(--warning-muted)] text-[var(--warning)]`
   }
-  return `${base} bg-emerald-500/15 text-emerald-100 border-emerald-300/70`
+  return `${base} border-[var(--ok)]/50 bg-[var(--ok-muted)] text-[var(--ok)]`
 }
 
 function previewPayload(p: Record<string, unknown>) {
@@ -151,5 +158,5 @@ function previewPayload(p: Record<string, unknown>) {
     if (p[k] !== undefined) parts.push(`${k}: ${String(p[k])}`)
   }
   if (parts.length === 0) return JSON.stringify(p)
-  return parts.join(' · ')
+  return parts.join(' | ')
 }

@@ -1,4 +1,4 @@
-from typing import Optional, Literal
+from typing import Any, Optional, Literal
 from datetime import datetime
 from pydantic import BaseModel, Field
 
@@ -9,7 +9,7 @@ LegMode = Literal["road", "rail", "sea", "air", "transfer"]
 
 class PlanCreate(BaseModel):
     shipment_ids: list[str]
-    objective: Optional[str] = None
+    objective: Optional[dict[str, float]] = None
     modes: Optional[list[str]] = None
     constraints: Optional[dict] = None
     selected_mode: Optional[LegMode] = None
@@ -20,7 +20,7 @@ class PlanCreate(BaseModel):
 
 class PlanSummary(BaseModel):
     total_cost: Optional[float] = None
-    total_time_min: Optional[int] = None
+    total_time_min: Optional[float] = None
     total_co2e_kg: Optional[float] = None
     on_time_probability: float | None = None
 
@@ -49,5 +49,9 @@ class PlanOut(BaseModel):
     # ML outputs
     delay_prob: Optional[float]
     expected_delay_min: Optional[float]
+    delay_source: Optional[str] = None
+    delay_model_version: Optional[str] = None
+    objective: Optional[dict[str, float]] = None
+    delay_context: Optional[dict[str, Any]] = None
     summary: Optional[PlanSummary] = None
     legs: list[PlanLeg] = Field(default_factory=list)

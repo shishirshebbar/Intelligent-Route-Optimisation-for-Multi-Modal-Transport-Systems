@@ -1,3 +1,5 @@
+Receiver Operating Characteristic - Area Under Curvev  is a performance metric for binary classification problems, measuring 
+how well a model separates positive and negative classes across all possible probability thresholds
 % Suggested packages for the main paper preamble:
 % \usepackage{booktabs}
 % \usepackage{longtable}
@@ -13,17 +15,66 @@ Logistics routing in small and medium transport operations is still frequently p
 For road segments, shortest-path geometry and travel duration are obtained from OSRM over OpenStreetMap data. For rail, sea, and air, the current prototype uses a graph-search routing layer over a seeded multimodal edge network rather than external operator timetables. Delay modelling is implemented using a Random Forest classifier and Random Forest regressor trained on a 200-row shipment dataset with operational and environmental features. Experimental results show differentiated transport choices under different scenarios: road under short normal trips, rail under congestion and weather conditions, air under peak-hour delay-sensitive conditions, and sea under green-corridor sustainability-weighted conditions. The prototype demonstrates that an emissions-aware and delay-aware multimodal decision-support system can be built as a credible research platform, while also highlighting the gap between a research-grade comparative engine and a fully operational real-world multimodal routing stack.
 
 \section{Introduction}
-Modern logistics systems operate in conditions where route planning is no longer a shortest-path problem alone. Transport planners must balance service time, expected disruption, operating cost, and environmental impact while handling shipments across depots, rail yards, ports, airports, and customer delivery points. Existing commercial map tools are highly effective for point-to-point road navigation, but they do not natively expose organisation-specific logistics networks, multimodal transfer points, or explicit sustainability trade-offs. As a result, many logistics decisions continue to rely on manual planning or fragmented decision support.
+Modern logistics systems operate in conditions where route planning is no longer a shortest-path problem alone. Transport planners must balance service time, expected disruption, operating cost, and environmental impact while handling shipments across depots, rail yards, ports, airports, and customer delivery points. Prior survey work shows that multimodal transport research has increasingly shifted from single-criterion path finding toward integrated decision models that combine cost, time, network structure, and sustainability concerns \cite{matei2021}. Existing commercial map tools are highly effective for point-to-point road navigation, but they do not natively expose organisation-specific logistics networks, multimodal transfer points, or explicit sustainability trade-offs. As a result, many logistics decisions continue to rely on manual planning or fragmented decision support.
 
-This work addresses that gap by developing a prototype intelligent route optimisation system for multi-modal transport. The prototype is designed as a research platform rather than a production transport management system. Its main objective is to evaluate how transport mode selection changes when travel time, delay risk, cost, and estimated \(\mathrm{CO_2e}\) emissions are jointly considered. The system integrates a backend API, dashboard visualisation, delay prediction service, road routing through OSRM, and a graph-based multimodal routing layer for research scenarios involving rail, sea, and air.
+Recent literature confirms that the field is moving in three complementary directions. The first direction focuses on multimodal network design and route selection under multiple objectives, including cost, time, carbon, and risk \cite{ghaderi2015, shang2021, maneengam2023, liwang2023, koohathongsumrit2024}. The second direction focuses on predictive intelligence, especially short-term travel time and disruption-aware route prediction using machine learning \cite{qiu2021, prakash2024}. The third direction extends optimisation to mode-specific domains such as maritime routing, where time, fuel, and emissions are explicitly traded off \cite{zhao2024}. This work addresses that gap by developing a prototype intelligent route optimisation system for multi-modal transport. The prototype is designed as a research platform rather than a production transport management system. Its main objective is to evaluate how transport mode selection changes when travel time, delay risk, cost, and estimated \(\mathrm{CO_2e}\) emissions are jointly considered. The system integrates a backend API, dashboard visualisation, delay prediction service, road routing through OSRM, and a graph-based multimodal routing layer for research scenarios involving rail, sea, and air.
 
-The contribution of this work is threefold. First, it provides an end-to-end software prototype connecting routing, monitoring, event ingestion, and machine-learning-based delay estimation. Second, it introduces an emissions-aware and delay-aware multimodal evaluation workflow that can be executed reproducibly. Third, it provides a controlled set of scenario outcomes that can be used to discuss trade-offs relevant to sustainable development, especially in the context of cleaner freight movement and resilient transport planning.
+The contribution of this work is threefold. First, it provides an end-to-end software prototype connecting routing, monitoring, event ingestion, and machine-learning-based delay estimation. Second, it introduces an emissions-aware and delay-aware multimodal evaluation workflow that can be executed reproducibly. Third, it provides a controlled set of scenario outcomes that can be used to discuss trade-offs relevant to sustainable development, especially in the context of cleaner freight movement and resilient transport planning. In contrast to optimisation-only studies, the present system also exposes the outputs through a working dashboard; in contrast to purely predictive studies, it carries route and disruption features forward into planning decisions.
 
 \subsection{Existing System}
 The existing system, as represented in current industry practice, is dominated by road-only trip planning and static dispatch logic. In many small and medium logistics operations, route choice is produced either manually or with general navigation platforms that optimise one trip at a time. Such tools are useful for driver guidance, but they typically do not integrate shipment priority, estimated disruption, explicit carbon metrics, or alternative transport strategies such as rail, air, or sea. This results in three important limitations: first, decision-making becomes reactive rather than analytical; second, sustainability is rarely quantified in day-to-day routing; and third, multimodal planning remains inaccessible without specialised commercial software.
 
 \subsection{Proposed System}
 The proposed system is a multimodal decision-support prototype that extends road navigation with three additional capabilities. The first is \textit{comparative optimisation}, where multiple transport modes are evaluated under the same objective function. The second is \textit{delay-aware planning}, where route and plan decisions can be informed by a machine-learned delay estimate. The third is \textit{operational visibility}, where the selected route, route metrics, recent events, and evaluation indicators are exposed through a dashboard rather than hidden inside a backend service. Although the present prototype does not yet provide timetable-validated real-world rail, sea, or air engine integrations, it does implement these modes as graph-search alternatives over a seeded logistics network, which is sufficient for controlled research comparisons.
+
+\section{Literature Survey}
+The verified literature most relevant to this project can be grouped into four themes: multimodal optimisation surveys, multimodal route and hub optimisation, predictive delay and travel-time modelling, and sustainability-oriented routing. These themes map directly to the implemented prototype, which combines a route engine, a comparative optimiser, and a delay prediction service.
+
+Matei et al. surveyed integrative multimodal transport research and showed that the field consistently revolves around the joint treatment of cost, time, and network topology rather than isolated shortest-path planning \cite{matei2021}. That survey is especially relevant to the present project because it highlights the persistent gap between algorithmic models and deployable multimodal software systems. Our prototype explicitly tries to narrow that gap by combining a runnable software stack with a measurable evaluation workflow.
+
+Ghaderi and Pahlavani proposed a multimodal multi-criteria route planning model that combined fuzzy-AHP weighting with simulated annealing \cite{ghaderi2015}. Their case study covered central Tehran and considered five transport modes with fare, time, user discomfort, and path length as criteria. The reported outcome was that the proposed approach achieved high efficiency and speed in identifying acceptable routes. This paper aligns closely with our weighted mode-selection logic because both systems treat route choice as a multi-criteria compromise rather than a single-metric optimum.
+
+Shang et al. studied the bi-objective hierarchical multimodal hub location problem for cargo delivery systems \cite{shang2021}. Using the Turkish network data set, they formulated a mixed-integer model that minimizes both system-wide cost and maximum delivery time, then solved larger instances using variable neighborhood search and an improved NSGA-II. Their results showed that the developed heuristics outperformed a standard NSGA-II on realistic-sized instances. This is directly relevant to our work because it illustrates the kind of stronger hub- and network-level optimiser that would be needed to move our current prototype beyond per-scenario comparative mode selection.
+
+Maneengam addressed a real-world multimodal bulk transportation problem in Thailand using an adaptive \(\varepsilon\)-constraint method to generate Pareto solutions, D-CRITIC to weight the criteria, and modified TOPSIS to rank the alternatives \cite{maneengam2023}. The study simultaneously optimized cost, transport time, and \(\mathrm{CO_2e}\) emissions and reported that the proposed approach produced more Pareto solutions per unit of computational effort than a more conventional \(\varepsilon\)-constraint workflow. This paper is strongly aligned with our current objective formulation because our prototype also compares cost, delay, and emissions together, although with a lighter-weight heuristic implementation.
+
+Li and Wang extended multimodal planning to carbon-aware hub location by formulating a mixed-integer nonlinear model and solving it with an adaptive genetic algorithm \cite{liwang2023}. Their real-world case study around Ningbo Port showed that an additional secondary hub increased cargo flow by 41.46\%, reduced transportation time by 2.2\%, and reduced total cost by 2.35\%. This work is particularly relevant to the SDG framing of our paper because it demonstrates that carbon-aware multimodal decisions can be linked to infrastructure and flow design rather than only to route ranking.
+
+Koohathongsumrit et al. proposed an integrated fuzzy hierarchy risk assessment and multi-criteria decision-making framework for multimodal route selection \cite{koohathongsumrit2024}. Their method combines the best-worst method for criteria weighting, fuzzy hierarchy risk assessment for propagating qualitative risk through the decision hierarchy, and ARAS for ranking alternatives. The paper reports that the approach successfully identified the best compromise route in a realistic case study. This is closely related to our disruption-aware logic because it emphasizes that route selection should explicitly account for structured risk, not only deterministic cost and time.
+
+Qiu and Fan investigated short-term travel time prediction on freeway corridors using RITIS probe vehicle data \cite{qiu2021}. They compared Decision Trees, Random Forest, XGBoost, and LSTM across 15--60 minute prediction horizons and concluded that Random Forest achieved the most stable and accurate performance. This result is directly reflected in our implementation choice: the current prototype uses Random Forest models for both delay classification and delay regression, and our measured training outputs on the repository dataset are consistent with the idea that tree-based models remain strong baselines for transport prediction tasks.
+
+Prakash et al. addressed dynamic route unavailability in multimodal transport networks through a route-prediction methodology that combines Monte Carlo simulation with an LSTM network \cite{prakash2024}. Their framework generates synthetic training samples to capture stochastic route conditions and uses placeholder notation to represent temporarily unavailable segments. The study reports successful validation on disruption-aware route prediction tasks. This is highly relevant to our project because it points toward the next stage beyond our current prototype: integrating route prediction under disruptions, not just static comparative evaluation.
+
+Finally, Zhao and Zhao showed how multi-objective maritime route planning can jointly address energy consumption and travel time using a non-dominated sorting genetic algorithm \cite{zhao2024}. Their experiments reported a fuel reduction of 6.94\% relative to a large-ring route and further improvements over a traditional genetic algorithm. This paper is useful for our project because it supports the inclusion of sea transport as a meaningful low-carbon alternative in research prototypes, even when the maritime engine is not yet connected to a live carrier schedule.
+
+Table~\ref{tab:literature-survey} summarizes the verified literature and its specific relevance to the implemented system.
+
+\begin{longtable}{p{2.6cm}p{3.5cm}p{3.6cm}p{3.3cm}p{2.8cm}}
+\caption{Verified literature aligned to the present project.}
+\label{tab:literature-survey}\\
+\toprule
+Reference & Data set / case context & Algorithm / model used & Main output reported by the paper & Alignment with this project \\
+\midrule
+\endfirsthead
+\toprule
+Reference & Data set / case context & Algorithm / model used & Main output reported by the paper & Alignment with this project \\
+\midrule
+\endhead
+Matei et al.~\cite{matei2021} & Survey of multimodal transport research; no single benchmark data set & Survey of models and solvers for integrative multimodal transport & Identified cost, time, and network topology as dominant research dimensions and emphasized the gap between theory and real-world deployment & Frames our project as a deployable research prototype rather than only an algorithmic study \\
+Ghaderi and Pahlavani~\cite{ghaderi2015} & Central Tehran case; five modes including subway, BRT, taxi, walking, and bus & Fuzzy-AHP for criteria weights plus simulated annealing for route search & Reported high efficiency and speed for multimodal multi-criteria route planning & Closely matches our weighted route and mode scoring logic \\
+Shang et al.~\cite{shang2021} & Turkish network data set for cargo delivery systems & Bi-objective MILP, variable neighborhood search, improved NSGA-II & Produced high-quality Pareto solutions and outperformed standard NSGA-II on realistic instances & Illustrates the stronger hub-level optimiser that our future system could adopt \\
+Maneengam~\cite{maneengam2023} & Real-world multimodal bulk transportation problem in Thailand & Adaptive \(\varepsilon\)-constraint, D-CRITIC, modified TOPSIS & Generated Pareto solutions and improved the ratio of solution quality to computational time & Strongly aligned with our cost-time-emissions evaluation structure \\
+Li and Wang~\cite{liwang2023} & Real-world Ningbo Port case study & MINLP with adaptive genetic algorithm & Additional hub raised cargo flow by 41.46\%, reduced time by 2.2\%, and reduced total cost by 2.35\% & Supports the carbon-aware multimodal and SDG angle of our paper \\
+Koohathongsumrit et al.~\cite{koohathongsumrit2024} & Realistic multimodal route-selection case study & BWM, fuzzy hierarchy risk assessment, ARAS & Identified the best compromise route while incorporating hierarchical risk & Mirrors our disruption-aware planning goal \\
+Qiu and Fan~\cite{qiu2021} & RITIS probe-vehicle travel-time data on freeway corridors & Decision Tree, Random Forest, XGBoost, LSTM comparison & Random Forest gave the best overall prediction performance and stability & Directly motivates our Random Forest delay models \\
+Prakash et al.~\cite{prakash2024} & Monte Carlo-generated multimodal route sequences with route unavailability & Monte Carlo simulation plus LSTM & Demonstrated accurate route prediction under dynamic route unavailability & Points to a next-step extension beyond our current static mode evaluation \\
+Zhao and Zhao~\cite{zhao2024} & Maritime route-planning experiments under complex sea conditions & Non-dominated sorting genetic algorithm with energy-consumption objective & Reduced fuel consumption by 6.94\% relative to a large-ring route & Justifies including sea mode in sustainability-focused evaluations \\
+\bottomrule
+\end{longtable}
+
+\subsection{Research Gap}
+The verified literature shows that most prior work concentrates on one of three layers in isolation: optimisation models, prediction models, or domain-specific routing models. In contrast, the present project attempts to connect these layers into one executable research system. However, the literature survey also makes the current limitations of our prototype clearer. Compared with Shang et al.~\cite{shang2021} and Li and Wang~\cite{liwang2023}, our optimiser is still lightweight and does not yet solve full-scale constrained multimodal network design. Compared with Prakash et al.~\cite{prakash2024}, our disruption logic is event-aware but not yet sequence-predictive. Compared with Zhao and Zhao~\cite{zhao2024}, our sea mode is represented through a graph-based research network rather than an operational maritime weather-routing engine. These distinctions should be stated clearly in the paper so that the contribution is framed as an authentic software-and-evaluation prototype.
 
 \section{Methodology}
 \subsection{System Architecture}
@@ -271,3 +322,34 @@ This work presented an intelligent routing prototype for multi-modal transport s
 The current prototype demonstrates that mode selection changes significantly under different operational priorities. Short normal trips remain road-dominant, congestion-heavy and weather-affected scenarios favour rail, highly delay-sensitive scenarios can justify air despite sustainability penalties, and sustainability-weighted long-haul scenarios favour sea transport. These findings indicate that intelligent multimodal selection can provide a useful trade-off analysis framework for sustainable logistics planning.
 
 At the same time, the study has clear limitations. Only road routing is backed by an external routing engine, while rail, sea, and air currently operate through a graph-based research prototype rather than real timetable-aware operator networks. Similarly, carbon savings are estimated through modeled coefficients rather than field-validated fuel or lifecycle measurements. Despite these limitations, the system is sufficiently grounded for research reporting, prototype demonstration, and SDG-oriented discussion on lower-emission freight decision support.
+
+\begin{thebibliography}{99}
+
+\bibitem{matei2021}
+O. Matei, R. Erdei, and C.-M. Pintea, ``Selective Survey: Most Efficient Models and Solvers for Integrative Multimodal Transport,'' \textit{Informatica}, 2021, doi: 10.15388/21-INFOR449.
+
+\bibitem{ghaderi2015}
+F. Ghaderi and P. Pahlavani, ``A New Multimodal Multi-Criteria Route Planning Model by Integrating a Fuzzy-AHP Weighting Method and a Simulated Annealing Algorithm,'' \textit{The International Archives of the Photogrammetry, Remote Sensing and Spatial Information Sciences}, 2015, doi: 10.5194/isprsarchives-XL-1-W5-203-2015.
+
+\bibitem{shang2021}
+X. Shang, K. Yang, B. Jia, Z. Gao, and H. Ji, ``Heuristic Algorithms for the Bi-Objective Hierarchical Multimodal Hub Location Problem in Cargo Delivery Systems,'' \textit{Applied Mathematical Modelling}, 2021, doi: 10.1016/j.apm.2020.09.057.
+
+\bibitem{maneengam2023}
+A. Maneengam, ``Multi-Objective Optimization of the Multimodal Routing Problem Using the Adaptive $\varepsilon$-Constraint Method and Modified TOPSIS with the D-CRITIC Method,'' \textit{Sustainability}, 2023, doi: 10.3390/su151512066.
+
+\bibitem{liwang2023}
+H. Li and Y. Wang, ``Hierarchical Multimodal Hub Location Problem with Carbon Emissions,'' \textit{Sustainability}, 2023, doi: 10.3390/su15031945.
+
+\bibitem{koohathongsumrit2024}
+N. Koohathongsumrit, W. Chankham, and W. Meethom, ``Multimodal Transport Route Selection: An Integrated Fuzzy Hierarchy Risk Assessment and Multiple Criteria Decision-Making Approach,'' \textit{Transportation Research Interdisciplinary Perspectives}, 2024, doi: 10.1016/j.trip.2024.101252.
+
+\bibitem{qiu2021}
+B. Qiu and W. Fan, ``Machine Learning Based Short-Term Travel Time Prediction: Numerical Results and Comparative Analyses,'' \textit{Sustainability}, 2021, doi: 10.3390/su13137454.
+
+\bibitem{prakash2024}
+S. Prakash, U. Mehta, and B. Sharma, ``Artificial Intelligence-Driven Multimodal Route Planning: Addressing Dynamic Unavailability and Disruptions,'' \textit{IEEE Access}, 2024, doi: 10.1109/ACCESS.2024.3498863.
+
+\bibitem{zhao2024}
+S. Zhao and S. Zhao, ``Ship Global Traveling Path Optimization via a Novel Non-Dominated Sorting Genetic Algorithm,'' \textit{Journal of Marine Science and Engineering}, 2024, doi: 10.3390/jmse12030485.
+
+\end{thebibliography}

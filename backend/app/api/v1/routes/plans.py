@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Generator, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
 from app.db.session import SessionLocal
@@ -31,6 +31,7 @@ def get_db() -> Generator[Session, None, None]:
 # ---------- Helpers ----------
 def _to_plan_out(plan: PlanModel, legs: List[PlanLegModel]) -> PlanOut:
     summary = None
+    details = plan.details_json or {}
     if plan.total_time_min is not None or plan.total_co2e_kg is not None:
         summary = PlanSummary(
             total_time_min=plan.total_time_min,
@@ -71,6 +72,10 @@ def _to_plan_out(plan: PlanModel, legs: List[PlanLegModel]) -> PlanOut:
         legs=legs_out,
         delay_prob=plan.delay_prob,
         expected_delay_min=plan.expected_delay_min,
+        delay_source=details.get("delay_source"),
+        delay_model_version=details.get("delay_model_version"),
+        objective=details.get("objective"),
+        delay_context=details.get("delay_context"),
     )
 
 
@@ -193,6 +198,16 @@ async def create_plan(payload: PlanCreate, db: Session = Depends(get_db)):
 
     plan.delay_prob = delay["delay_prob"]
     plan.expected_delay_min = delay["expected_delay_min"]
+    details = dict(plan.details_json or {})
+    details["delay_source"] = delay.get("source")
+    details["delay_model_version"] = delay.get("model_version")
+    details["delay_context"] = {
+        "features": delay_features,
+        "environment": environment,
+        "source": delay.get("source"),
+        "model_version": delay.get("model_version"),
+    }
+    plan.details_json = details
 
     db.commit()
     db.refresh(plan)
@@ -219,11 +234,19 @@ def get_plan(plan_id: str, db: Session = Depends(get_db)):
 @router.get("", response_model=list[PlanOut])
 def list_plans(
     status: Optional[str] = Query(None, description="draft|active|rerouted|completed|failed"),
+    limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
+    # FastAPI should inject plain values here, but older call paths can leak Query objects.
+    if not isinstance(status, (str, type(None))):
+        status = None
+    if not isinstance(limit, int):
+        limit = 50
+
     stmt = select(PlanModel)
     if status:
         stmt = stmt.where(PlanModel.status == status)
+    stmt = stmt.order_by(desc(PlanModel.created_at)).limit(limit)
 
     plans = db.execute(stmt).scalars().all()
     # for a lightweight list, don’t fetch legs; return empty lists

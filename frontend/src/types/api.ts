@@ -78,12 +78,23 @@ export type DynamicKpis = {
   cost_change_pct: number
 }
 
+export type RouteComparison = {
+  baseline_distance_km: number
+  baseline_time_min: number
+  baseline_co2e_kg: number
+  baseline_cost: number
+  baseline_delay_min: number
+  selected_cost: number
+  selected_delay_min: number
+}
+
 export interface RouteOut {
   distance_km: number
   time_min: number
   co2e_kg: number
   legs: RouteLegOut[]
   kpis: DynamicKpis
+  comparison: RouteComparison
   source?: string
 }
 export type PlanOut = {
@@ -95,5 +106,14 @@ export type PlanOut = {
   total_co2e_kg: number
   delay_prob: number | null
   expected_delay_min: number | null
+  delay_source?: string | null
+  delay_model_version?: string | null
+  objective?: Record<string, number> | null
+  delay_context?: {
+    features?: Record<string, string | number | boolean | null>
+    environment?: Record<string, string | number | boolean | null>
+    source?: string | null
+    model_version?: string | null
+  } | null
 }
 

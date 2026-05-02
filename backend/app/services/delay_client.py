@@ -30,7 +30,8 @@ def _dummy_predict(features: Dict[str, Any]) -> Dict[str, float]:
     return {
         "delay_prob": round(delay_prob, 3),
         "expected_delay_min": round(delay_min, 1),
-        "model_version": "dummy_v0"
+        "model_version": "dummy_v0",
+        "source": "fallback",
     }
 
 
@@ -89,5 +90,6 @@ async def predict_delay(features: Dict[str, Any]) -> Dict[str, float]:
     if "delay_prob" not in data or "expected_delay_min" not in data:
         raise DelayClientError("Malformed ML delay response")
 
+    data.setdefault("source", "ml")
     return data
 

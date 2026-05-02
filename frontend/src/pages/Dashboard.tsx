@@ -1,6 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import type { ReactNode } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
+import {
+  Activity,
+  AlertTriangle,
+  ArrowRightLeft,
+  BarChart3,
+  type LucideIcon,
+  Map as MapIcon,
+  RefreshCcw,
+  Route,
+  ShieldAlert,
+  Waypoints,
+} from 'lucide-react'
 import api from '../api/client'
+import { fetchEvents } from '../api/events'
 import type {
   DynamicKpis,
   EventOut,
@@ -15,11 +29,15 @@ import type {
 import Map from '../components/Map/Map'
 import Kpis from '../components/Kpis/kpis'
 import EventsFeed from '../components/Events/EventsFeed'
-import { km, mins, kg } from '../utils/format'
+import { kg, km, mins } from '../utils/format'
 import DelayTrendChart from '../components/Charts/DelayTrendChart'
-import { fetchEvaluationMetrics, type EvaluationMetrics } from '../api/metrics'
 import DelayComparisonChart from '../components/Charts/DelayComparisonChart'
 import EmissionsByModeChart from '../components/Charts/EmissionsByModeChart'
+import ComputationTrace from '../components/Trace/ComputationTrace'
+
+const panel = 'rounded-lg border border-[var(--line-soft)] bg-[var(--surface-1)] flex flex-col'
+const field =
+  'h-10 rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text-primary)] shadow-none outline-none transition focus:border-[var(--accent-strong)]'
 
 export default function Dashboard() {
   const [locations, setLocations] = useState<LocationOut[]>([])
@@ -36,10 +54,42 @@ export default function Dashboard() {
   const [isLoadingInitial, setIsLoadingInitial] = useState(true)
   const [plan, setPlan] = useState<PlanOut | null>(null)
   const [delayTrend, setDelayTrend] = useState<{ time: string; expected_delay_min: number }[]>([])
-  const [evalMetrics, setEvalMetrics] = useState<EvaluationMetrics | null>(null)
   const [dynamicKpis, setDynamicKpis] = useState<DynamicKpis | null>(null)
+  const [tracePlaybackDone, setTracePlaybackDone] = useState(false)
+  const [weights, setWeights] = useState({ cost: 50, time: 30, co2e: 20 })
+  const [traceRunId, setTraceRunId] = useState(0)
+  const [traceSnapshot, setTraceSnapshot] = useState<{
+    shipmentId: string
+    originName: string
+    destinationName: string
+    mode: string
+    weights: { cost: number; time: number; co2e: number }
+  } | null>(null)
 
   const lastEventTs = useMemo(() => events[0]?.ts, [events])
+  const selectedShipment = useMemo(
+    () => shipments.find(shipment => shipment.id === shipmentId) ?? null,
+    [shipments, shipmentId]
+  )
+  const origin = useMemo(
+    () => locations.find(location => location.id === originId) ?? null,
+    [locations, originId]
+  )
+  const destination = useMemo(
+    () => locations.find(location => location.id === destId) ?? null,
+    [locations, destId]
+  )
+  const normalisedWeights = useMemo(() => {
+    const total = weights.cost + weights.time + weights.co2e
+    if (total <= 0) {
+      return { cost: 0.333, time: 0.333, co2e: 0.334 }
+    }
+    return {
+      cost: Number((weights.cost / total).toFixed(3)),
+      time: Number((weights.time / total).toFixed(3)),
+      co2e: Number((weights.co2e / total).toFixed(3)),
+    }
+  }, [weights])
 
   useEffect(() => {
     ;(async () => {
@@ -70,17 +120,33 @@ export default function Dashboard() {
   const loadEvents = async () => {
     try {
       setEventsErr(null)
-      const evRes = await api.get<EventOut[]>('/events', { params: { limit: 30 } })
-      setEvents(evRes.data)
+      const evData = await fetchEvents({ limit: 30 })
+      setEvents(evData)
     } catch (e: any) {
       setEventsErr(e?.message || 'Failed to load events')
+    }
+  }
+
+  const loadPlanHistory = async () => {
+    try {
+      const plansRes = await api.get<PlanOut[]>('/plans', { params: { limit: 20 } })
+      const history = [...plansRes.data]
+        .filter(item => item.expected_delay_min !== null && item.expected_delay_min !== undefined)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+        .map(item => ({
+          time: new Date(item.created_at).toLocaleTimeString(),
+          expected_delay_min: item.expected_delay_min as number,
+        }))
+      setDelayTrend(history)
+    } catch (e) {
+      console.warn('Plan history not available')
     }
   }
 
   useEffect(() => {
     let timer: number | undefined
     ;(async () => {
-      await loadEvents()
+      await Promise.all([loadEvents(), loadPlanHistory()])
       timer = window.setInterval(() => loadEvents().catch(() => {}), 60_000)
     })()
 
@@ -89,32 +155,20 @@ export default function Dashboard() {
     }
   }, [])
 
-  useEffect(() => {
-    ;(async () => {
-      try {
-        const data = await fetchEvaluationMetrics()
-        setEvalMetrics(data)
-      } catch (e) {
-        console.warn('Evaluation metrics not available')
-      }
-    })()
-  }, [])
-
   const handleShipmentChange = (nextShipmentId: string) => {
     setShipmentId(nextShipmentId)
-    const selectedShipment = shipments.find(shipment => shipment.id === nextShipmentId)
-    if (selectedShipment) {
-      setOriginId(selectedShipment.origin_id)
-      setDestId(selectedShipment.destination_id)
+    const shipment = shipments.find(item => item.id === nextShipmentId)
+    if (shipment) {
+      setOriginId(shipment.origin_id)
+      setDestId(shipment.destination_id)
     }
   }
 
   const handleRoute = async () => {
     setRoute(null)
-    const selectedShipment = shipments.find(shipment => shipment.id === shipmentId)
-    const origin = locations.find(location => location.id === originId)
-    const destination = locations.find(location => location.id === destId)
-
+    setPlan(null)
+    setDynamicKpis(null)
+    setTracePlaybackDone(false)
     if (!selectedShipment || !origin || !destination) return
 
     const payload: RoutingRequest = {
@@ -123,11 +177,19 @@ export default function Dashboard() {
       origin_id: origin.id,
       destination_id: destination.id,
       modes: [mode],
-      objective: { cost: 0.5, time: 0.3, co2e: 0.2 },
+      objective: normalisedWeights,
     }
 
     try {
       setIsRouting(true)
+      setTraceSnapshot({
+        shipmentId: selectedShipment.id,
+        originName: origin.name,
+        destinationName: destination.name,
+        mode,
+        weights: normalisedWeights,
+      })
+      setTraceRunId(current => current + 1)
 
       const routeRes = await api.post<RouteOut>('/routing/multimodal', payload)
       setRoute(routeRes.data)
@@ -135,6 +197,7 @@ export default function Dashboard() {
 
       const planRes = await api.post<PlanOut>('/plans', {
         shipment_ids: [selectedShipment.id],
+        objective: normalisedWeights,
         selected_mode: mode,
         total_distance_km: routeRes.data.distance_km,
         total_time_min: routeRes.data.time_min,
@@ -143,357 +206,557 @@ export default function Dashboard() {
       })
 
       setPlan(planRes.data)
-      if (planRes.data.expected_delay_min !== null) {
-        setDelayTrend(prev => [
-          ...prev,
-          {
-            time: new Date().toLocaleTimeString(),
-            expected_delay_min: planRes.data.expected_delay_min as number,
-          },
-        ])
-      }
+      await loadPlanHistory()
     } catch (e: any) {
-      console.error('Failed to compute demo route flow', e?.message)
+      console.error('Failed to compute route flow', e?.message)
     } finally {
       setIsRouting(false)
     }
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 bg-[radial-gradient(circle_at_top,_#1f2937,_#020617)] text-white">
-      <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6 lg:py-8 space-y-6">
-        <motion.header
-          className="flex flex-wrap items-center gap-4 justify-between"
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-        >
+    <div className="space-y-4">
+      <motion.header
+        className={`${panel} grid gap-4 px-5 py-4 lg:grid-cols-[minmax(0,1fr)_auto]`}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+      >
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+            Operations overview
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">Network Control Console</h1>
+            <div className="inline-flex items-center gap-2 rounded-full border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 py-1 text-[11px] text-[var(--text-secondary)]">
+              <span className="inline-flex h-2 w-2 rounded-full bg-[var(--ok)]" />
+              Road routing active
+            </div>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm text-[var(--text-secondary)]">
+            Plan a shipment route, inspect network activity, and compare operational impact
+            without leaving the console.
+          </p>
+        </div>
+
+        <div className="grid items-start gap-2 sm:grid-cols-3 lg:min-w-[420px]">
+          <StatusTile label="Shipments loaded" value={String(shipmentsCount)} icon={Route} />
+          <StatusTile label="Locations tracked" value={String(locations.length)} icon={Waypoints} />
+          <StatusTile
+            label="Latest event"
+            value={lastEventTs ? new Date(lastEventTs).toLocaleTimeString() : '--'}
+            icon={Activity}
+          />
+        </div>
+      </motion.header>
+
+      <section className={`${panel} px-5 py-4`}>
+        <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-teal-500/40 bg-teal-500/10 text-sm">
-                CT
-              </span>
-              Network Control Tower
-            </h1>
-            <p className="mt-1 text-sm text-slate-300/80">
-              Monitor your logistics network, trace events, and simulate routes in real time.
-            </p>
+            <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+              Network snapshot
+            </div>
+            <div className="mt-1 text-sm text-[var(--text-secondary)]">
+              Core KPIs update after route computation and event polling.
+            </div>
           </div>
+        </div>
+        <Kpis
+          shipments={shipmentsCount}
+          locations={locations.length}
+          lastEvent={lastEventTs}
+          delayProb={plan?.delay_prob ?? undefined}
+          expectedDelayMin={plan?.expected_delay_min ?? undefined}
+          delayReductionPct={dynamicKpis?.delay_reduction_pct}
+          emissionsSavedPct={dynamicKpis?.emissions_saved_pct}
+          costChangePct={dynamicKpis?.cost_change_pct}
+        />
+      </section>
 
-          <motion.div
-            className="flex items-center gap-3 text-xs text-slate-300/80 rounded-full border border-white/10 bg-white/5 px-4 py-2 backdrop-blur-md"
-            initial={{ opacity: 0, x: 10 }}
-            animate={{ opacity: 1, x: 0 }}
-          >
-            <span className="flex h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.9)]" />
-            <span>Live data</span>
-          </motion.div>
-        </motion.header>
-
-        <motion.div
-          className="text-black"
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.1 }}
-        >
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-slate-900/80 via-slate-900/60 to-slate-900/30 p-4 sm:p-5 shadow-lg shadow-slate-900/60 backdrop-blur-xl">
-            <Kpis
-              shipments={shipmentsCount}
-              locations={locations.length}
-              lastEvent={lastEventTs}
-              delayProb={plan?.delay_prob ?? undefined}
-              expectedDelayMin={plan?.expected_delay_min ?? undefined}
-              delayReductionPct={dynamicKpis?.delay_reduction_pct}
-              emissionsSavedPct={dynamicKpis?.emissions_saved_pct}
-              costChangePct={dynamicKpis?.cost_change_pct}
-              reroutesCount={evalMetrics?.reroutes_count}
-            />
-          </div>
-        </motion.div>
-
-        <motion.div
-          className="mb-1 rounded-2xl border border-white/10 bg-slate-900/70 p-4 sm:p-5 shadow-lg shadow-black/40 backdrop-blur-xl"
+      <section className="grid items-start gap-4 xl:grid-cols-[420px_minmax(0,1fr)_360px]">
+        <motion.section
+          className={`${panel} overflow-hidden`}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.15 }}
+          transition={{ duration: 0.25, delay: 0.05 }}
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <div className="text-sm font-medium text-white/80 flex items-center gap-2">
-              <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-xs">
-                RP
-              </span>
-              Routing Playground
-            </div>
+          <PanelHeader
+            title="Route planner"
+            subtitle="Select shipment details and compute a route using your chosen weighting profile."
+            icon={ArrowRightLeft}
+          />
+
+          <div className="space-y-4 px-5 py-4">
             {isLoadingInitial && (
-              <div className="flex items-center gap-2 text-xs text-slate-300/70">
-                <span className="inline-flex h-4 w-4 animate-spin rounded-full border border-slate-500/40 border-t-transparent" />
-                Loading network...
+              <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 py-2 text-sm text-[var(--text-secondary)]">
+                Loading shipments and network locations...
               </div>
             )}
-          </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-col gap-1 text-xs text-slate-400/90">
-              <span className="pl-1">Shipment</span>
+            <Field label="Shipment">
               <select
-                className="min-w-[180px] rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-xs sm:text-sm text-white shadow-sm shadow-black/40 backdrop-blur focus:border-teal-300/60 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
+                className={field}
                 value={shipmentId}
                 onChange={e => handleShipmentChange(e.target.value)}
               >
-                <option className="bg-slate-900 text-white" value="">
-                  Select shipment...
-                </option>
+                <option value="">Select shipment...</option>
                 {shipments.map(shipment => (
-                  <option className="bg-slate-900 text-white" key={shipment.id} value={shipment.id}>
+                  <option key={shipment.id} value={shipment.id}>
                     {shipment.id} ({shipment.weight_kg} kg, P{shipment.priority})
                   </option>
                 ))}
               </select>
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+              <Field label="Origin">
+                <select
+                  className={field}
+                  value={originId}
+                  onChange={e => setOriginId(e.target.value ? Number(e.target.value) : '')}
+                >
+                  <option value="">Select origin...</option>
+                  {locations.map(location => (
+                    <option key={location.id} value={location.id}>
+                      {location.name} ({location.type})
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="Destination">
+                <select
+                  className={field}
+                  value={destId}
+                  onChange={e => setDestId(e.target.value ? Number(e.target.value) : '')}
+                >
+                  <option value="">Select destination...</option>
+                  {locations.map(location => (
+                    <option key={location.id} value={location.id}>
+                      {location.name} ({location.type})
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
 
-            <div className="flex flex-col gap-1 text-xs text-slate-400/90">
-              <span className="pl-1">Origin</span>
+            <Field label="Transport mode">
               <select
-                className="min-w-[160px] rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-xs sm:text-sm text-white shadow-sm shadow-black/40 backdrop-blur focus:border-teal-300/60 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
-                value={originId}
-                onChange={e => setOriginId(e.target.value ? Number(e.target.value) : '')}
-              >
-                <option className="bg-slate-900 text-white" value="">
-                  Select origin...
-                </option>
-                {locations.map(location => (
-                  <option className="bg-slate-900 text-white" key={location.id} value={location.id}>
-                    {location.name} ({location.type})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1 text-xs text-slate-400/90">
-              <span className="pl-1">Destination</span>
-              <select
-                className="min-w-[160px] rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-xs sm:text-sm text-white shadow-sm shadow-black/40 backdrop-blur focus:border-teal-300/60 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
-                value={destId}
-                onChange={e => setDestId(e.target.value ? Number(e.target.value) : '')}
-              >
-                <option className="bg-slate-900 text-white" value="">
-                  Select destination...
-                </option>
-                {locations.map(location => (
-                  <option className="bg-slate-900 text-white" key={location.id} value={location.id}>
-                    {location.name} ({location.type})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-1 text-xs text-slate-400/90">
-              <span className="pl-1">Mode</span>
-              <select
-                className="min-w-[110px] rounded-xl border border-white/15 bg-slate-950/70 px-3 py-2 text-xs sm:text-sm text-white shadow-sm shadow-black/40 backdrop-blur focus:border-teal-300/60 focus:outline-none focus:ring-2 focus:ring-teal-400/30"
+                className={field}
                 value={mode}
                 onChange={e => setMode(e.target.value as typeof mode)}
               >
-                <option className="bg-slate-900 text-white" value="road">
-                  Road
-                </option>
-                <option className="bg-slate-900 text-white" value="rail">
-                  Rail
-                </option>
-                <option className="bg-slate-900 text-white" value="sea">
-                  Sea
-                </option>
-                <option className="bg-slate-900 text-white" value="air">
-                  Air
-                </option>
+                <option value="road">Road</option>
+                <option value="rail">Rail</option>
+                <option value="sea">Sea</option>
+                <option value="air">Air</option>
               </select>
+            </Field>
+
+            <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] p-4">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                Objective weights
+              </div>
+              <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                These values are normalised before routing. They matter when the graph contains multiple feasible paths or transport options.
+              </div>
+              <div className="mt-4 space-y-4">
+                <WeightControl
+                  label="Cost"
+                  value={weights.cost}
+                  onChange={value => setWeights(prev => ({ ...prev, cost: value }))}
+                />
+                <WeightControl
+                  label="Time"
+                  value={weights.time}
+                  onChange={value => setWeights(prev => ({ ...prev, time: value }))}
+                />
+                <WeightControl
+                  label="CO2e"
+                  value={weights.co2e}
+                  onChange={value => setWeights(prev => ({ ...prev, co2e: value }))}
+                />
+              </div>
+              <div className="mt-4 grid items-start gap-2 sm:grid-cols-3">
+                <MetricCard label="Cost" value={normalisedWeights.cost.toFixed(3)} />
+                <MetricCard label="Time" value={normalisedWeights.time.toFixed(3)} />
+                <MetricCard label="CO2e" value={normalisedWeights.co2e.toFixed(3)} />
+              </div>
             </div>
 
-            <motion.button
-              className="group mt-5 inline-flex items-center gap-2 rounded-xl border border-teal-300/50 bg-gradient-to-r from-teal-500/30 via-teal-400/30 to-emerald-400/30 px-4 py-2 text-xs sm:text-sm font-medium text-teal-50 shadow-inner shadow-teal-500/40 backdrop-blur transition hover:from-teal-400/40 hover:to-emerald-400/40 active:scale-[.98] disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={handleRoute}
-              disabled={!shipmentId || !originId || !destId || isRouting}
-              whileTap={{ scale: 0.97 }}
-            >
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/20 text-[11px]">
-                {isRouting ? (
-                  <span className="h-3 w-3 animate-spin rounded-full border border-teal-200/70 border-t-transparent" />
-                ) : (
-                  '>'
-                )}
-              </span>
-              <span>{isRouting ? 'Computing route...' : 'Compute Route'}</span>
-            </motion.button>
+            <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] p-4">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                Current selection
+              </div>
+              <div className="mt-3 space-y-2 text-sm text-[var(--text-secondary)]">
+                <KeyValue label="Shipment" value={selectedShipment?.id ?? '--'} />
+                <KeyValue label="Origin" value={origin?.name ?? '--'} />
+                <KeyValue label="Destination" value={destination?.name ?? '--'} />
+                <KeyValue label="Mode" value={mode} />
+              </div>
+            </div>
 
-            <button
-              className="ml-auto mt-5 inline-flex items-center gap-1 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs text-white/80 transition hover:bg-white/10"
-              onClick={loadEvents}
-              title="Refresh events"
-            >
-              <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-white/5 text-[10px]">
-                R
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-[var(--accent-soft)] bg-[var(--accent-muted)] px-4 text-sm font-medium text-[var(--accent-strong)] transition hover:border-[var(--accent-strong)] hover:bg-[var(--surface-3)] disabled:cursor-not-allowed disabled:opacity-50"
+                onClick={handleRoute}
+                disabled={!shipmentId || !originId || !destId || isRouting}
+              >
+                {isRouting ? (
+                  <span className="h-4 w-4 animate-spin rounded-full border border-current border-r-transparent" />
+                ) : (
+                  <Route className="h-4 w-4" />
+                )}
+                {isRouting ? 'Computing route...' : 'Compute route'}
+              </button>
+
+              <button
+                className="inline-flex h-10 items-center gap-2 rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 text-sm text-[var(--text-secondary)] transition hover:border-[var(--line-strong)] hover:text-[var(--text-primary)]"
+                onClick={loadEvents}
+                title="Refresh events"
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Refresh events
+              </button>
+            </div>
+
+            {eventsErr && (
+              <div className="rounded-md border border-[var(--danger)]/50 bg-[var(--danger-muted)] px-3 py-2 text-sm text-[var(--danger)]">
+                {eventsErr}
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        <motion.section
+          className={`${panel} overflow-hidden`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.1 }}
+        >
+          <PanelHeader
+            title="Map and route summary"
+            subtitle="Verify the selected path against network locations and inspect the latest computed metrics."
+            icon={MapIcon}
+          />
+
+          <div className="border-b border-[var(--line-soft)] px-5 py-3 text-sm text-[var(--text-secondary)]">
+            {origin && destination ? (
+              <span>
+                {origin.name} to {destination.name}
               </span>
-              <span>Refresh events</span>
-            </button>
+            ) : (
+              <span>Select a shipment to view its route context.</span>
+            )}
           </div>
 
-          {eventsErr && (
-            <div className="mt-3 rounded-xl border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-100">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500/50 text-[10px]">
-                  !
-                </span>
-                <span>{eventsErr}</span>
-              </div>
+          <div className="border-b border-[var(--line-soft)] bg-[var(--surface-2)]">
+            <div className="relative">
+              <Map locations={locations} route={tracePlaybackDone ? route : null} />
+              {!tracePlaybackDone && (
+                <div className="pointer-events-none absolute inset-0 grid place-items-center bg-[var(--surface-1)]/15 backdrop-blur-[1px]">
+                  <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-1)]/90 px-4 py-2 text-sm text-[var(--text-secondary)] shadow-sm">
+                    Map is live. Route overlay unlocks after the trace completes.
+                  </div>
+                </div>
+              )}
             </div>
-          )}
-        </motion.div>
+          </div>
 
-        <motion.div
-          className="grid grid-cols-12 gap-6"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, delay: 0.2 }}
-        >
-          <div className="col-span-12 lg:col-span-8 xl:col-span-7 space-y-4">
-            <motion.div
-              className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/80 shadow-2xl shadow-black/50 backdrop-blur-xl"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.25 }}
-            >
-              <div className="flex items-center justify-between border-b border-white/5 px-4 py-3 text-xs text-slate-300/80">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-white/5 text-[11px]">
-                    MP
-                  </span>
-                  <span>Network Map</span>
-                </div>
-                <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                  {originId && destId ? (
-                    <>
-                      <span className="truncate max-w-[160px]">
-                        From: {locations.find(location => location.id === originId)?.name ?? '-'}
-                      </span>
-                      <span>to</span>
-                      <span className="truncate max-w-[160px]">
-                        To: {locations.find(location => location.id === destId)?.name ?? '-'}
-                      </span>
-                    </>
-                  ) : (
-                    <span>Select a shipment to view a route.</span>
-                  )}
-                </div>
-              </div>
-
-              <div className="h-[360px] sm:h-[420px]">
-                <Map locations={locations} route={route} />
-              </div>
-            </motion.div>
-
-            <AnimatePresence>
-              {route && (
+          <div className="px-5 py-4">
+            <AnimatePresence mode="wait">
+              {tracePlaybackDone && route ? (
                 <motion.div
-                  className="mt-1 rounded-2xl border border-white/10 bg-slate-900/80 p-4 backdrop-blur-xl shadow-lg shadow-black/50"
-                  initial={{ opacity: 0, y: 8 }}
+                  key="route-summary"
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 8 }}
-                  transition={{ duration: 0.25 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4"
                 >
-                  <div className="mb-2 flex items-center justify-between text-xs text-white/70">
-                    <div className="flex items-center gap-2">
-                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-lg bg-teal-500/15 text-[10px] text-teal-200">
-                        OK
-                      </span>
-                      <span>Route Summary</span>
-                    </div>
-                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-[10px] uppercase tracking-wide text-slate-300">
-                      {mode} mode {route.source ? `· ${route.source}` : ''}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-4 text-sm text-white/80">
-                    <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
-                      <div className="flex flex-col">
-                        <span className="text-xs text-white/60">Distance</span>
-                        <span className="font-medium">{km(route.distance_km)}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
-                      <div className="flex flex-col">
-                        <span className="text-xs text-white/60">Time</span>
-                        <span className="font-medium">{mins(route.time_min)}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
-                      <div className="flex flex-col">
-                        <span className="text-xs text-white/60">CO2e</span>
-                        <span className="font-medium">{kg(route.co2e_kg)}</span>
-                      </div>
-                    </div>
-                    {plan?.expected_delay_min !== null && plan?.expected_delay_min !== undefined && (
-                      <div className="flex items-center gap-2 rounded-xl bg-white/5 px-3 py-2">
-                        <div className="flex flex-col">
-                          <span className="text-xs text-white/60">Expected Delay</span>
-                          <span className="font-medium">{mins(plan.expected_delay_min)}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  <MetricCard label="Distance" value={km(route.distance_km)} />
+                  <MetricCard label="Travel time" value={mins(route.time_min)} />
+                  <MetricCard label="CO2e" value={kg(route.co2e_kg)} />
+                  <MetricCard
+                    label="Expected delay"
+                    value={
+                      plan?.expected_delay_min !== null && plan?.expected_delay_min !== undefined
+                        ? mins(plan.expected_delay_min)
+                        : '--'
+                    }
+                  />
+                  </motion.div>
+              ) : tracePlaybackDone ? (
+                <motion.div
+                  key="route-empty"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-md border border-dashed border-[var(--line-strong)] px-4 py-6 text-sm text-[var(--text-dim)]"
+                >
+                  Compute a route to populate the route summary and compare route metrics.
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="route-lock"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="rounded-md border border-dashed border-[var(--line-strong)] px-4 py-6 text-sm text-[var(--text-dim)]"
+                >
+                  The route summary is locked until the trace finishes.
                 </motion.div>
               )}
             </AnimatePresence>
+
+            {tracePlaybackDone && route && (
+              <div className="mt-4 grid items-start gap-3 md:grid-cols-2">
+                <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                    Route source
+                  </div>
+                  <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                    {route.source ?? 'Routing service'}
+                  </div>
+                </div>
+                <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                    Weight profile
+                  </div>
+                  <div className="mt-2 text-sm text-[var(--text-secondary)]">
+                    C {normalisedWeights.cost.toFixed(3)} | T {normalisedWeights.time.toFixed(3)} | E {normalisedWeights.co2e.toFixed(3)}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </motion.section>
+
+        <motion.section
+          className={`${panel} overflow-hidden`}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, delay: 0.15 }}
+        >
+          <PanelHeader
+            title="Event activity"
+            subtitle="Recent operational events pulled from the event feed."
+            icon={ShieldAlert}
+          />
+            <div className="events-scroll h-[760px] overflow-y-auto px-5 py-4">
+            <EventsFeed limit={30} pollMs={60_000} onLoaded={setEvents} />
+          </div>
+        </motion.section>
+      </section>
+
+      <motion.section
+        className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, delay: 0.2 }}
+      >
+        <div className="grid gap-4">
+          <div className={`${panel} overflow-hidden`}>
+            <PanelHeader
+              title="Computation trace"
+              subtitle="Replay the backend pipeline in slow motion using the live inputs and responses from this run."
+              icon={Activity}
+            />
+            <div className="px-5 py-4">
+              <ComputationTrace
+                runId={traceRunId}
+                isRouting={isRouting}
+                snapshot={traceSnapshot}
+                route={route}
+                plan={plan}
+                stepDelayMs={1100}
+                onComplete={() => setTracePlaybackDone(true)}
+              />
+            </div>
           </div>
 
-          <div className="col-span-12 lg:col-span-4 xl:col-span-5">
-            <motion.div
-              className="rounded-2xl border border-white/10 bg-slate-900/80 p-4 sm:p-5 shadow-2xl shadow-black/50 backdrop-blur-2xl"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: 0.3 }}
-            >
-              <div className="mb-3 flex items-center justify-between text-sm text-white/70">
-                <div className="flex items-center gap-2">
-                  <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-500/20 text-[11px]">
-                    EV
-                  </span>
-                  <span>Recent Events</span>
+          <div className={`${panel} overflow-hidden`}>
+            <PanelHeader
+              title="Delay monitoring"
+              subtitle="Predicted delay values are loaded from persisted plans, so the trend survives page refreshes."
+              icon={BarChart3}
+            />
+            <div className="px-5 py-4">
+              {tracePlaybackDone ? (
+                <div className="mb-4 rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+                        Delay prediction source
+                      </div>
+                      <div className="mt-1 text-sm text-[var(--text-secondary)]">
+                        {plan?.delay_source === 'ml'
+                          ? `Model-backed${plan.delay_model_version ? ` (${plan.delay_model_version})` : ''}`
+                          : plan?.delay_source === 'fallback'
+                            ? `Fallback estimate${plan?.delay_model_version ? ` (${plan.delay_model_version})` : ''}`
+                            : 'Compute a route to inspect delay provenance.'}
+                      </div>
+                    </div>
+                    {plan?.delay_source === 'ml' ? (
+                      <span className="rounded-full border border-[var(--ok)]/50 bg-[var(--ok-muted)] px-3 py-1 text-xs font-medium text-[var(--ok)]">
+                        ML
+                      </span>
+                    ) : plan?.delay_source === 'fallback' ? (
+                      <span className="inline-flex items-center gap-2 rounded-full border border-[var(--warning)]/50 bg-[var(--warning-muted)] px-3 py-1 text-xs font-medium text-[var(--warning)]">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Fallback
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-[var(--line-soft)] px-3 py-1 text-xs text-[var(--text-dim)]">
+                        Unknown
+                      </span>
+                    )}
+                  </div>
+                  {plan?.delay_source === 'fallback' && (
+                    <div className="mt-3 text-sm text-[var(--text-dim)]">
+                      The ML service was unavailable for this plan, so the backend used its built-in fallback estimator.
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center gap-2 text-[11px] text-slate-400">
-                  <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400" />
-                  <span>Live feed</span>
-                </div>
-              </div>
-
-              <div className="events-scroll max-h-[460px] overflow-y-auto overflow-x-hidden rounded-xl border border-white/5 bg-slate-950/60">
-                <EventsFeed limit={30} pollMs={60_000} />
-              </div>
-
-              <motion.div
-                className="mt-4 rounded-2xl border border-white/10 bg-slate-900/80 p-4 shadow-lg backdrop-blur-xl"
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-              >
-                <div className="mb-2 text-sm font-medium text-white/80 flex items-center gap-2">
-                  Delay Trend (ML Prediction)
-                </div>
-
+              ) : (
+                <LockedResults label="Delay provenance will appear after the trace finishes." />
+              )}
+              {tracePlaybackDone ? (
                 <DelayTrendChart data={delayTrend} />
-                <div className="mt-4 grid grid-cols-1 gap-4">
-                  <DelayComparisonChart
-                    baselineDelayMin={evalMetrics?.delay_baseline_min}
-                    optimisedDelayMin={evalMetrics?.delay_optimised_min}
-                  />
-                  <EmissionsByModeChart
-                    baselineRoadEmissions={evalMetrics?.emissions_by_mode.baseline_road}
-                    optimisedModeEmissions={evalMetrics?.emissions_by_mode.optimised_mode}
-                  />
-                </div>
-              </motion.div>
-            </motion.div>
+              ) : (
+                <LockedResults label="Delay trend will appear after the trace finishes." />
+              )}
+            </div>
           </div>
-        </motion.div>
+        </div>
+
+        <div className="grid gap-4">
+          {tracePlaybackDone ? (
+            <DelayComparisonChart
+              baselineDelayMin={route?.comparison.baseline_delay_min}
+              optimisedDelayMin={route?.comparison.selected_delay_min}
+            />
+          ) : (
+            <LockedResults label="Delay comparison will unlock after the run completes." />
+          )}
+          {tracePlaybackDone ? (
+            <EmissionsByModeChart
+              baselineRoadEmissions={route?.comparison.baseline_co2e_kg}
+              optimisedModeEmissions={route?.co2e_kg}
+            />
+          ) : (
+            <LockedResults label="Emissions comparison will unlock after the run completes." />
+          )}
+        </div>
+      </motion.section>
+    </div>
+  )
+}
+
+function LockedResults({ label }: { label: string }) {
+  return (
+    <div className="grid min-h-[280px] place-items-center rounded-md border border-dashed border-[var(--line-strong)] bg-[var(--surface-2)] px-4 py-6 text-center text-sm text-[var(--text-dim)]">
+      {label}
+    </div>
+  )
+}
+
+function PanelHeader({
+  title,
+  subtitle,
+  icon: Icon,
+}: {
+  title: string
+  subtitle: string
+  icon: LucideIcon
+}) {
+  return (
+    <div className="border-b border-[var(--line-soft)] px-5 py-4">
+      <div className="flex items-center gap-3">
+        <div className="grid h-9 w-9 place-items-center rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] text-[var(--accent-strong)]">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <div className="text-sm font-semibold text-[var(--text-primary)]">{title}</div>
+          <div className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</div>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function StatusTile({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string
+  value: string
+  icon: LucideIcon
+}) {
+  return (
+    <div className="h-full rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 py-3">
+      <div className="flex items-center gap-2 text-[var(--text-faint)]">
+        <Icon className="h-4 w-4 text-[var(--accent-strong)]" />
+        <span className="text-[11px] uppercase tracking-[0.12em]">{label}</span>
+      </div>
+      <div className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{value}</div>
+    </div>
+  )
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="block">
+      <div className="mb-2 text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
+        {label}
+      </div>
+      {children}
+    </label>
+  )
+}
+
+function KeyValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-[var(--line-soft)] py-2 last:border-b-0 last:pb-0 first:pt-0">
+      <span className="text-[var(--text-dim)]">{label}</span>
+      <span className="text-right text-[var(--text-primary)]">{value}</span>
+    </div>
+  )
+}
+
+function MetricCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="h-full rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-3">
+      <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">{label}</div>
+      <div className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{value}</div>
+    </div>
+  )
+}
+
+function WeightControl({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <div>
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <span className="text-sm text-[var(--text-secondary)]">{label}</span>
+        <span className="text-sm text-[var(--text-primary)]">{value}</span>
+      </div>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="w-full accent-[var(--accent-strong)]"
+      />
     </div>
   )
 }

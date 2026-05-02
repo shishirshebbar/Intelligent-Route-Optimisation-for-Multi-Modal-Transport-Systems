@@ -10,11 +10,11 @@ export default function EmissionsByModeChart({
 }) {
   if (baselineRoadEmissions === undefined || optimisedModeEmissions === undefined) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4 shadow-lg backdrop-blur-xl">
-        <div className="mb-2 text-sm font-medium text-white/80">
-          Emissions by Transport Strategy
+      <div className="rounded-lg border border-[var(--line-soft)] bg-[var(--surface-1)] p-4">
+        <div className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+          Emissions by transport strategy
         </div>
-        <div className="py-10 text-center text-xs text-slate-400">
+        <div className="py-10 text-center text-sm text-[var(--text-dim)]">
           Evaluation data not available yet
         </div>
       </div>
@@ -25,9 +25,10 @@ export default function EmissionsByModeChart({
     labels: ['Baseline Road', 'Optimised Selection'],
     datasets: [
       {
-        label: 'CO2 Emissions (kg)',
+        label: 'CO2 emissions (kg)',
         data: [baselineRoadEmissions, optimisedModeEmissions],
-        backgroundColor: ['#f97316', '#22c55e'],
+        backgroundColor: ['#ef4444', '#22c55e'],
+        borderRadius: 4,
       },
     ],
   }
@@ -37,14 +38,29 @@ export default function EmissionsByModeChart({
     plugins: {
       legend: { display: false },
     },
+    scales: {
+      x: {
+        ticks: { color: '#9fb0c0' },
+        grid: { display: false },
+      },
+      y: {
+        ticks: { color: '#9fb0c0' },
+        grid: { color: '#243246' },
+      },
+    },
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-4 shadow-lg backdrop-blur-xl">
-      <div className="mb-2 text-sm font-medium text-white/80">
-        Emissions by Transport Strategy
+    <div className="flex flex-col rounded-lg border border-[var(--line-soft)] bg-[var(--surface-1)] p-4">
+      <div className="mb-2 text-sm font-semibold text-[var(--text-primary)]">
+        Emissions by transport strategy
       </div>
-      <Bar data={data} options={options} />
+      <div className="text-sm text-[var(--text-secondary)]">
+        Compare road-only baseline emissions with the optimised selection.
+      </div>
+      <div className="mt-3 flex-1">
+        <Bar data={data} options={options} />
+      </div>
     </div>
   )
 }

@@ -69,12 +69,23 @@ class DynamicKpiOut(BaseModel):
     cost_change_pct: float
 
 
+class RouteComparisonOut(BaseModel):
+    baseline_distance_km: float
+    baseline_time_min: float
+    baseline_co2e_kg: float
+    baseline_cost: float
+    baseline_delay_min: float
+    selected_cost: float
+    selected_delay_min: float
+
+
 class RouteOut(BaseModel):
     distance_km: float
     time_min: float
     co2e_kg: float
     legs: list[RouteLegOut]
     kpis: DynamicKpiOut
+    comparison: RouteComparisonOut
     source: str = "heuristic"
 
 
@@ -262,5 +273,14 @@ async def compute_multimodal_route(payload: RoutingRequest, db: Session = Depend
         co2e_kg=total_co2e_kg,
         legs=graph_legs,
         kpis=kpis,
+        comparison=RouteComparisonOut(
+            baseline_distance_km=round(baseline_leg.distance_km, 3),
+            baseline_time_min=round(baseline_leg.time_min, 1),
+            baseline_co2e_kg=round(baseline_leg.co2e_kg, 3),
+            baseline_cost=round(base_cost, 2),
+            baseline_delay_min=round(base_delay, 2),
+            selected_cost=round(opt_cost, 2),
+            selected_delay_min=round(opt_delay, 2),
+        ),
         source=selected_source,
     )
