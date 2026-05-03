@@ -8,6 +8,7 @@ type TraceSnapshot = {
   originName: string
   destinationName: string
   mode: string
+  objectivePreset: string
   weights: {
     cost: number
     time: number
@@ -57,7 +58,7 @@ export default function ComputationTrace({
         title: 'Normalise route objective',
         icon: Activity,
         ready: true,
-        detail: `cost ${snapshot.weights.cost.toFixed(3)}, time ${snapshot.weights.time.toFixed(3)}, CO2e ${snapshot.weights.co2e.toFixed(3)}`,
+        detail: `${snapshot.objectivePreset} profile | cost ${snapshot.weights.cost.toFixed(3)}, time ${snapshot.weights.time.toFixed(3)}, CO2e ${snapshot.weights.co2e.toFixed(3)}`,
       },
       {
         key: 'routing-request',

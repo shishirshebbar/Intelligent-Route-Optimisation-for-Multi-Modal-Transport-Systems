@@ -91,3 +91,47 @@ INSERT INTO edges (from_id, to_id, mode, distance_km, base_time_min, base_cost, 
 (13, 18, 'road', 18.0, 32, 216.0, 2.16, NULL),
 (13, 19, 'road', 22.0, 38, 264.0, 2.64, NULL)
 ON CONFLICT DO NOTHING;
+
+UPDATE edges
+SET shape_json = '[[13.0827,80.2707],[13.11,80.15],[13.07,80.22],[13.0820,80.2750]]'::jsonb
+WHERE from_id = 3 AND to_id = 6 AND mode = 'rail';
+
+UPDATE edges
+SET shape_json = '[[12.9716,77.5946],[13.40,77.70],[12.90,77.95],[13.0500,77.5500]]'::jsonb
+WHERE from_id = 4 AND to_id = 6 AND mode = 'sea';
+
+UPDATE edges
+SET shape_json = '[[12.9991,77.5700],[13.35,77.95],[12.95,78.55],[13.1067,80.3206]]'::jsonb
+WHERE from_id = 5 AND to_id = 6 AND mode = 'air';
+
+UPDATE edges
+SET shape_json = '[[13.0827,80.2707],[13.40,80.55],[12.90,80.85],[13.0500,77.5500]]'::jsonb
+WHERE from_id = 3 AND to_id = 8 AND mode = 'rail';
+
+UPDATE edges
+SET shape_json = '[[13.0827,80.2707],[14.50,80.55],[16.20,79.90],[17.6868,83.2185]]'::jsonb
+WHERE from_id = 3 AND to_id = 17 AND mode = 'rail';
+
+UPDATE edges
+SET shape_json = '[[17.3850,78.4867],[16.80,78.20],[15.40,78.55],[13.0500,77.5500]]'::jsonb
+WHERE from_id = 4 AND to_id = 8 AND mode = 'sea';
+
+UPDATE edges
+SET shape_json = '[[17.3850,78.4867],[16.70,79.10],[15.10,79.80],[13.1067,80.3206]]'::jsonb
+WHERE from_id = 4 AND to_id = 9 AND mode = 'sea';
+
+UPDATE edges
+SET shape_json = '[[12.9991,77.5700],[14.20,78.60],[15.90,80.10],[17.6868,83.2185]]'::jsonb
+WHERE from_id = 5 AND to_id = 10 AND mode = 'air';
+
+UPDATE edges
+SET shape_json = '[[12.9991,77.5700],[13.70,78.50],[15.20,79.20],[13.1986,77.7066]]'::jsonb
+WHERE from_id = 5 AND to_id = 11 AND mode = 'air';
+
+UPDATE edges
+SET shape_json = '[[13.0500,77.5500],[13.80,77.95],[15.00,78.35],[13.1986,77.7066]]'::jsonb
+WHERE from_id = 8 AND to_id = 11 AND mode = 'air';
+
+UPDATE edges
+SET shape_json = '[[13.1986,77.7066],[14.50,78.90],[15.90,80.10],[17.3850,78.4867]]'::jsonb
+WHERE from_id = 11 AND to_id = 17 AND mode = 'air';

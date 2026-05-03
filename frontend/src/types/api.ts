@@ -70,6 +70,7 @@ export interface RouteLegOut {
   time_min: number
   co2e_kg: number
   polyline?: string | null
+  shape?: Coord[] | null
   source?: string
 }
 export type DynamicKpis = {
@@ -93,6 +94,7 @@ export interface RouteOut {
   time_min: number
   co2e_kg: number
   legs: RouteLegOut[]
+  baseline_legs?: RouteLegOut[]
   kpis: DynamicKpis
   comparison: RouteComparison
   source?: string

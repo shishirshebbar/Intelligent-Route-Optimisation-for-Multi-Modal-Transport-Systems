@@ -60,6 +60,7 @@ class RouteLegOut(BaseModel):
     time_min: float
     co2e_kg: float
     polyline: Optional[str] = None
+    shape: Optional[list[Coord]] = None
     source: str = "heuristic"
 
 
@@ -84,6 +85,7 @@ class RouteOut(BaseModel):
     time_min: float
     co2e_kg: float
     legs: list[RouteLegOut]
+    baseline_legs: list[RouteLegOut] = Field(default_factory=list)
     kpis: DynamicKpiOut
     comparison: RouteComparisonOut
     source: str = "heuristic"
@@ -131,6 +133,7 @@ async def _compute_road_metrics(origin: Coord, dest: Coord) -> tuple[float, floa
 async def _compute_mode_leg(mode: Mode, origin: Coord, dest: Coord) -> RouteLegOut:
     if mode == "road":
         distance_km, time_min, polyline, source = await _compute_road_metrics(origin, dest)
+        shape = None
     else:
         params = MODE_PARAMS.get(mode)
         if params is None:
@@ -139,6 +142,7 @@ async def _compute_mode_leg(mode: Mode, origin: Coord, dest: Coord) -> RouteLegO
         time_min = (distance_km / params["speed_kph"]) * 60.0 + params["transfer_penalty_min"]
         polyline = None
         source = "heuristic"
+        shape = None
 
     return RouteLegOut(
         mode=mode,
@@ -148,6 +152,7 @@ async def _compute_mode_leg(mode: Mode, origin: Coord, dest: Coord) -> RouteLegO
         time_min=round(time_min, 1),
         co2e_kg=round(distance_km * _CO2E_PER_KM.get(mode, 0.0), 3),
         polyline=polyline,
+        shape=shape,
         source=source,
     )
 
@@ -180,10 +185,13 @@ async def _compute_graph_legs(
         from_coord = Coord(lat=float(from_location.lat), lon=float(from_location.lon))
         to_coord = Coord(lat=float(to_location.lat), lon=float(to_location.lon))
         polyline = None
+        shape = None
         source = "graph"
         if route_edge.mode == "road":
             _, _, polyline, road_source = await _compute_road_metrics(from_coord, to_coord)
             source = f"graph+{road_source}"
+        else:
+            shape = None
 
         out_legs.append(
             RouteLegOut(
@@ -194,6 +202,7 @@ async def _compute_graph_legs(
                 time_min=round(route_edge.time_min, 1),
                 co2e_kg=round(route_edge.co2e_kg, 3),
                 polyline=polyline,
+                shape=shape,
                 source=source,
             )
         )
@@ -272,6 +281,7 @@ async def compute_multimodal_route(payload: RoutingRequest, db: Session = Depend
         time_min=total_time_min,
         co2e_kg=total_co2e_kg,
         legs=graph_legs,
+        baseline_legs=[baseline_leg],
         kpis=kpis,
         comparison=RouteComparisonOut(
             baseline_distance_km=round(baseline_leg.distance_km, 3),

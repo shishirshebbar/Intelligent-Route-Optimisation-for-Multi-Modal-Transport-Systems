@@ -39,6 +39,34 @@ const panel = 'rounded-lg border border-[var(--line-soft)] bg-[var(--surface-1)]
 const field =
   'h-10 rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-3 text-sm text-[var(--text-primary)] shadow-none outline-none transition focus:border-[var(--accent-strong)]'
 
+type ObjectivePresetKey = 'balanced' | 'fastest' | 'cheapest' | 'green'
+
+const objectivePresets: Record<
+  ObjectivePresetKey,
+  { label: string; description: string; weights: { cost: number; time: number; co2e: number } }
+> = {
+  balanced: {
+    label: 'Balanced',
+    description: 'Keeps cost, time, and emissions in play together.',
+    weights: { cost: 50, time: 30, co2e: 20 },
+  },
+  fastest: {
+    label: 'Fastest',
+    description: 'Prioritises travel time over cost and emissions.',
+    weights: { cost: 10, time: 80, co2e: 10 },
+  },
+  cheapest: {
+    label: 'Cheapest',
+    description: 'Biases the optimiser toward lower operating cost.',
+    weights: { cost: 80, time: 15, co2e: 5 },
+  },
+  green: {
+    label: 'Green',
+    description: 'Prefers lower emissions even if the trip takes longer.',
+    weights: { cost: 20, time: 20, co2e: 60 },
+  },
+}
+
 export default function Dashboard() {
   const [locations, setLocations] = useState<LocationOut[]>([])
   const [shipments, setShipments] = useState<ShipmentOut[]>([])
@@ -56,13 +84,14 @@ export default function Dashboard() {
   const [delayTrend, setDelayTrend] = useState<{ time: string; expected_delay_min: number }[]>([])
   const [dynamicKpis, setDynamicKpis] = useState<DynamicKpis | null>(null)
   const [tracePlaybackDone, setTracePlaybackDone] = useState(false)
-  const [weights, setWeights] = useState({ cost: 50, time: 30, co2e: 20 })
+  const [objectivePreset, setObjectivePreset] = useState<ObjectivePresetKey>('balanced')
   const [traceRunId, setTraceRunId] = useState(0)
   const [traceSnapshot, setTraceSnapshot] = useState<{
     shipmentId: string
     originName: string
     destinationName: string
     mode: string
+    objectivePreset: string
     weights: { cost: number; time: number; co2e: number }
   } | null>(null)
 
@@ -79,7 +108,10 @@ export default function Dashboard() {
     () => locations.find(location => location.id === destId) ?? null,
     [locations, destId]
   )
+  const selectedObjective = objectivePresets[objectivePreset]
+
   const normalisedWeights = useMemo(() => {
+    const weights = selectedObjective.weights
     const total = weights.cost + weights.time + weights.co2e
     if (total <= 0) {
       return { cost: 0.333, time: 0.333, co2e: 0.334 }
@@ -89,7 +121,7 @@ export default function Dashboard() {
       time: Number((weights.time / total).toFixed(3)),
       co2e: Number((weights.co2e / total).toFixed(3)),
     }
-  }, [weights])
+  }, [selectedObjective])
 
   useEffect(() => {
     ;(async () => {
@@ -187,6 +219,7 @@ export default function Dashboard() {
         originName: origin.name,
         destinationName: destination.name,
         mode,
+        objectivePreset: selectedObjective.label,
         weights: normalisedWeights,
       })
       setTraceRunId(current => current + 1)
@@ -355,28 +388,38 @@ export default function Dashboard() {
 
             <div className="rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] p-4">
               <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">
-                Objective weights
+                Optimization preference
               </div>
               <div className="mt-2 text-sm text-[var(--text-secondary)]">
-                These values are normalised before routing. They matter when the graph contains multiple feasible paths or transport options.
+                This is not shipment data. It tells the optimiser whether to lean toward speed,
+                cost, or emissions for the selected route.
               </div>
-              <div className="mt-4 space-y-4">
-                <WeightControl
-                  label="Cost"
-                  value={weights.cost}
-                  onChange={value => setWeights(prev => ({ ...prev, cost: value }))}
-                />
-                <WeightControl
-                  label="Time"
-                  value={weights.time}
-                  onChange={value => setWeights(prev => ({ ...prev, time: value }))}
-                />
-                <WeightControl
-                  label="CO2e"
-                  value={weights.co2e}
-                  onChange={value => setWeights(prev => ({ ...prev, co2e: value }))}
-                />
+
+              <div className="mt-4">
+                <Field label="Preset">
+                  <select
+                    className={field}
+                    value={objectivePreset}
+                    onChange={e => setObjectivePreset(e.target.value as ObjectivePresetKey)}
+                  >
+                    {Object.entries(objectivePresets).map(([key, preset]) => (
+                      <option key={key} value={key}>
+                        {preset.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
               </div>
+
+              <div className="mt-3 rounded-md border border-[var(--line-soft)] bg-[var(--surface-3)] px-4 py-3">
+                <div className="text-sm font-medium text-[var(--text-primary)]">
+                  {selectedObjective.label}
+                </div>
+                <div className="mt-1 text-sm text-[var(--text-secondary)]">
+                  {selectedObjective.description}
+                </div>
+              </div>
+
               <div className="mt-4 grid items-start gap-2 sm:grid-cols-3">
                 <MetricCard label="Cost" value={normalisedWeights.cost.toFixed(3)} />
                 <MetricCard label="Time" value={normalisedWeights.time.toFixed(3)} />
@@ -523,7 +566,7 @@ export default function Dashboard() {
                     Weight profile
                   </div>
                   <div className="mt-2 text-sm text-[var(--text-secondary)]">
-                    C {normalisedWeights.cost.toFixed(3)} | T {normalisedWeights.time.toFixed(3)} | E {normalisedWeights.co2e.toFixed(3)}
+                    {selectedObjective.label} | C {normalisedWeights.cost.toFixed(3)} | T {normalisedWeights.time.toFixed(3)} | E {normalisedWeights.co2e.toFixed(3)}
                   </div>
                 </div>
               </div>
@@ -729,34 +772,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     <div className="h-full rounded-md border border-[var(--line-soft)] bg-[var(--surface-2)] px-4 py-3">
       <div className="text-[11px] uppercase tracking-[0.12em] text-[var(--text-faint)]">{label}</div>
       <div className="mt-2 text-lg font-semibold text-[var(--text-primary)]">{value}</div>
-    </div>
-  )
-}
-
-function WeightControl({
-  label,
-  value,
-  onChange,
-}: {
-  label: string
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <div>
-      <div className="mb-2 flex items-center justify-between gap-3">
-        <span className="text-sm text-[var(--text-secondary)]">{label}</span>
-        <span className="text-sm text-[var(--text-primary)]">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={0}
-        max={100}
-        step={1}
-        value={value}
-        onChange={e => onChange(Number(e.target.value))}
-        className="w-full accent-[var(--accent-strong)]"
-      />
     </div>
   )
 }

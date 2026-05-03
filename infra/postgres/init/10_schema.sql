@@ -32,8 +32,11 @@ CREATE TABLE IF NOT EXISTS edges (
   base_time_min  INT NOT NULL,
   base_cost      DOUBLE PRECISION NOT NULL,
   co2e_kg        DOUBLE PRECISION DEFAULT 0,
-  timetable_json JSONB
+  timetable_json JSONB,
+  shape_json     JSONB
 );
+ALTER TABLE edges ADD COLUMN IF NOT EXISTS timetable_json JSONB;
+ALTER TABLE edges ADD COLUMN IF NOT EXISTS shape_json JSONB;
 CREATE INDEX IF NOT EXISTS idx_edges_mode ON edges(mode);
 CREATE INDEX IF NOT EXISTS idx_edges_from_to ON edges(from_id, to_id);
 

@@ -14,3 +14,4 @@ class Edge(Base):
     base_cost = Column(DOUBLE_PRECISION, nullable=False)
     co2e_kg = Column(DOUBLE_PRECISION, nullable=True)
     timetable_json = Column(JSONB, nullable=True)
+    shape_json = Column(JSONB, nullable=True)

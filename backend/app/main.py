@@ -13,6 +13,7 @@ import os
 from app.db.session import engine
 from app.db.base import Base
 from app.api.v1.routes.metrics import router as metrics_router
+from sqlalchemy import text
 
 # 🔴 REQUIRED: import models so SQLAlchemy sees them
 import app.db.models.plan
@@ -54,3 +55,7 @@ def create_app() -> FastAPI:
 
 app = create_app()
 Base.metadata.create_all(bind=engine)
+
+with engine.begin() as conn:
+    conn.execute(text("ALTER TABLE edges ADD COLUMN IF NOT EXISTS timetable_json JSONB"))
+    conn.execute(text("ALTER TABLE edges ADD COLUMN IF NOT EXISTS shape_json JSONB"))

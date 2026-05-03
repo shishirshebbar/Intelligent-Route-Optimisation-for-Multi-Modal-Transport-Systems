@@ -21,6 +21,7 @@ class GraphLeg:
     time_min: float
     cost: float
     co2e_kg: float
+    shape_json: list[list[float]] | None = None
 
 
 def _edge_weight(edge: Edge, objective: dict[str, float]) -> float:
@@ -91,6 +92,7 @@ def compute_graph_route(
                 time_min=float(edge.base_time_min),
                 cost=float(edge.base_cost),
                 co2e_kg=float(edge.co2e_kg or 0.0),
+                shape_json=edge.shape_json,  # type: ignore[arg-type]
             )
         )
         current = prev_node
